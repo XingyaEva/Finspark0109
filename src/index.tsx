@@ -17,7 +17,10 @@ import { assistantPageHtml } from './pages/assistant';
 import { assistantWidgetHtml } from './pages/assistantWidget';
 import { membershipPageHtml } from './pages/membership';
 import { settingsPageHtml } from './pages/settings';
+import { agentSettingsPageHtml } from './pages/agentSettings';
 import { floatingAssistantStyles, floatingAssistantHtml, floatingAssistantScript } from './components/floatingAssistant';
+import { analysisConfigStyles, analysisConfigHtml, analysisConfigScript } from './components/analysisConfig';
+import { responsiveStyles } from './styles/responsive';
 import type { Bindings } from './types';
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -58,6 +61,11 @@ app.get('/membership', (c) => {
 // 用户设置页面
 app.get('/settings', (c) => {
   return c.html(settingsPageHtml);
+});
+
+// Agent 配置中心页面
+app.get('/settings/agents', (c) => {
+  return c.html(agentSettingsPageHtml);
 });
 
 // 分享预览页面
@@ -207,12 +215,14 @@ app.get('/', (c) => {
         .pro-feature.locked { cursor: pointer; }
         .pro-feature.locked:hover { opacity: 0.8; }
         ${floatingAssistantStyles}
+        ${analysisConfigStyles}
+        ${responsiveStyles}
     </style>
 </head>
 <body class="text-white">
-    <!-- 导航栏 -->
-    <nav class="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-md border-b border-gray-800">
-        <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+    <!-- 桌面端导航栏 -->
+    <nav class="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-md border-b border-gray-800 hide-on-mobile">
+        <div class="container-adaptive py-4 flex items-center justify-between">
             <div class="flex items-center space-x-3">
                 <i class="fas fa-chart-line text-2xl gold-text"></i>
                 <span class="text-xl font-bold gold-gradient">Finspark 投资分析</span>
@@ -252,6 +262,7 @@ app.get('/', (c) => {
                         </div>
                         <a href="/my-reports" class="block px-4 py-2 hover:bg-gray-800 text-sm"><i class="fas fa-file-alt mr-2 gold-text"></i>我的分析</a>
                         <a href="/favorites" class="block px-4 py-2 hover:bg-gray-800 text-sm"><i class="fas fa-heart mr-2 gold-text"></i>我的收藏</a>
+                        <a href="/settings/agents" class="block px-4 py-2 hover:bg-gray-800 text-sm"><i class="fas fa-robot mr-2 gold-text"></i>Agent 配置</a>
                         <a href="/settings" class="block px-4 py-2 hover:bg-gray-800 text-sm"><i class="fas fa-cog mr-2 gold-text"></i>账号设置</a>
                         <hr class="border-gray-700 my-2">
                         <button onclick="logout()" class="w-full text-left px-4 py-2 hover:bg-gray-800 text-sm text-red-400"><i class="fas fa-sign-out-alt mr-2"></i>退出登录</button>
@@ -260,6 +271,95 @@ app.get('/', (c) => {
             </div>
         </div>
     </nav>
+    
+    <!-- 移动端导航栏 -->
+    <nav class="mobile-nav show-on-mobile">
+        <div class="px-4 py-3 flex items-center justify-between">
+            <a href="/" class="flex items-center space-x-2">
+                <i class="fas fa-chart-line text-xl gold-text"></i>
+                <span class="text-lg font-bold gold-gradient">Finspark</span>
+            </a>
+            <button onclick="toggleMobileMenu()" class="p-2 text-gray-400 hover:text-white touch-target" aria-label="打开菜单">
+                <i class="fas fa-bars text-xl"></i>
+            </button>
+        </div>
+    </nav>
+    
+    <!-- 移动端菜单遮罩 -->
+    <div id="mobileMenuOverlay" class="mobile-menu-overlay" onclick="closeMobileMenu()"></div>
+    
+    <!-- 移动端侧滑菜单 -->
+    <div id="mobileMenuPanel" class="mobile-menu-panel">
+        <div class="mobile-menu-header">
+            <span class="font-bold gold-gradient">菜单</span>
+            <button onclick="closeMobileMenu()" class="p-2 text-gray-400 hover:text-white touch-target" aria-label="关闭菜单">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+        
+        <!-- 移动端用户信息区域 -->
+        <div id="mobileUserSection" class="px-5 py-4 border-b border-gray-800">
+            <!-- 未登录状态 -->
+            <div id="mobileAuthButtons" class="space-y-3">
+                <button onclick="showModal('loginModal'); closeMobileMenu();" class="w-full btn-outline py-3 rounded-lg touch-target">登录</button>
+                <button onclick="showModal('registerModal'); closeMobileMenu();" class="w-full btn-gold py-3 rounded-lg touch-target">注册</button>
+            </div>
+            <!-- 已登录状态 -->
+            <div id="mobileUserInfo" class="hidden">
+                <div class="flex items-center space-x-3 mb-3">
+                    <div class="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center">
+                        <i class="fas fa-user-circle gold-text text-xl"></i>
+                    </div>
+                    <div>
+                        <div id="mobileUserName" class="font-medium text-sm"></div>
+                        <span id="mobileTierBadge" class="text-xs px-2 py-0.5 rounded bg-blue-600">免费</span>
+                    </div>
+                </div>
+                <div class="text-xs text-gray-500">
+                    今日分析：<span id="mobileQuotaDisplay" class="gold-text">--</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 移动端导航链接 -->
+        <div class="mobile-menu-section-title">导航</div>
+        <a href="/" class="mobile-menu-item" onclick="closeMobileMenu()">
+            <i class="fas fa-home"></i>
+            <span>首页</span>
+        </a>
+        <a href="/my-reports" class="mobile-menu-item" onclick="closeMobileMenu()">
+            <i class="fas fa-file-alt"></i>
+            <span>我的报告</span>
+        </a>
+        <a href="/favorites" class="mobile-menu-item" onclick="closeMobileMenu()">
+            <i class="fas fa-heart"></i>
+            <span>我的收藏</span>
+        </a>
+        
+        <div class="mobile-menu-divider"></div>
+        <div class="mobile-menu-section-title">设置</div>
+        <a href="/settings/agents" class="mobile-menu-item" onclick="closeMobileMenu()">
+            <i class="fas fa-robot"></i>
+            <span>Agent 配置</span>
+        </a>
+        <a href="/settings" class="mobile-menu-item" onclick="closeMobileMenu()">
+            <i class="fas fa-cog"></i>
+            <span>账号设置</span>
+        </a>
+        <a href="/membership" class="mobile-menu-item" onclick="closeMobileMenu()">
+            <i class="fas fa-crown"></i>
+            <span>会员中心</span>
+        </a>
+        
+        <!-- 已登录时显示退出按钮 -->
+        <div id="mobileLogoutSection" class="hidden">
+            <div class="mobile-menu-divider"></div>
+            <button onclick="logout(); closeMobileMenu();" class="mobile-menu-item w-full text-left text-red-400">
+                <i class="fas fa-sign-out-alt" style="color: #f87171;"></i>
+                <span>退出登录</span>
+            </button>
+        </div>
+    </div>
 
     <!-- 登录弹窗 -->
     <div id="loginModal" class="modal">
@@ -393,44 +493,46 @@ app.get('/', (c) => {
     </div>
 
     <!-- 主内容区 -->
-    <main class="pt-24 pb-16 px-4">
-        <div class="max-w-5xl mx-auto">
+    <main class="pt-adaptive-header pb-8 md:pb-16">
+        <div class="container-adaptive">
             <!-- Hero区域 -->
-            <div class="text-center mb-12">
-                <h1 class="text-5xl font-bold mb-4">
+            <div class="text-center mb-8 md:mb-12">
+                <h1 class="text-adaptive-hero font-bold mb-3 md:mb-4">
                     <span class="gold-gradient">AI驱动的</span>
                     <span class="text-white">智能财报分析</span>
                 </h1>
-                <p class="text-gray-400 text-lg max-w-2xl mx-auto">
+                <p class="text-gray-400 text-base md:text-lg search-container-adaptive mx-auto">
                     多Agent协同分析，深度解读企业财务健康状况，为您提供专业的投资决策支持
                 </p>
             </div>
 
             <!-- 搜索框 -->
-            <div class="relative max-w-2xl mx-auto mb-16">
+            <div class="relative search-container-adaptive mx-auto mb-8 md:mb-16">
                 <div class="relative">
-                    <i class="fas fa-search absolute left-5 top-1/2 -translate-y-1/2 text-gray-500"></i>
-                    <input type="text" id="searchInput" class="search-input w-full py-4 pl-14 pr-32 rounded-xl text-white text-lg" placeholder="输入股票代码或公司名称...">
-                    <button id="searchBtn" class="btn-gold absolute right-2 top-1/2 -translate-y-1/2 px-6 py-2 rounded-lg">
-                        <i class="fas fa-rocket mr-2"></i>开始分析
+                    <i class="fas fa-search absolute left-4 md:left-5 top-1/2 -translate-y-1/2 text-gray-500"></i>
+                    <input type="text" id="searchInput" class="search-input w-full py-3 md:py-4 pl-12 md:pl-14 pr-16 md:pr-32 rounded-xl text-white text-base md:text-lg" placeholder="输入股票代码或名称...">
+                    <button id="searchBtn" class="btn-gold absolute right-2 top-1/2 -translate-y-1/2 px-3 md:px-6 py-2 rounded-lg touch-target">
+                        <i class="fas fa-rocket md:mr-2"></i><span class="hidden md:inline">开始分析</span>
                     </button>
                 </div>
                 <div id="searchResults" class="hidden absolute w-full mt-2 rounded-xl overflow-hidden search-results z-50"></div>
+                
+                ${analysisConfigHtml}
             </div>
 
             <!-- 热门股票 -->
-            <div class="mb-16">
-                <h2 class="text-xl font-semibold mb-6 flex items-center">
-                    <i class="fas fa-fire gold-text mr-3"></i>
+            <div class="mb-8 md:mb-16">
+                <h2 class="text-lg md:text-xl font-semibold mb-4 md:mb-6 flex items-center">
+                    <i class="fas fa-fire gold-text mr-2 md:mr-3"></i>
                     <span class="gold-gradient">热门企业</span>
                 </h2>
-                <div id="hotStocks" class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div id="hotStocks" class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
                     <div class="stock-card rounded-xl p-4 text-center"><div class="loading-dot">加载中...</div></div>
                 </div>
             </div>
 
             <!-- 功能特点 -->
-            <div class="grid md:grid-cols-3 gap-6">
+            <div class="grid-adaptive-3 gap-4 md:gap-6">
                 <div class="stock-card card-hover rounded-xl p-6">
                     <div class="w-12 h-12 rounded-full bg-gradient-to-r from-yellow-600 to-yellow-400 flex items-center justify-center mb-4">
                         <i class="fas fa-brain text-white text-xl"></i>
@@ -456,8 +558,8 @@ app.get('/', (c) => {
         </div>
     </main>
 
-    <footer class="border-t border-gray-800 py-8">
-        <div class="max-w-7xl mx-auto px-4 text-center text-gray-500 text-sm">
+    <footer class="border-t border-gray-800 py-6 md:py-8">
+        <div class="container-adaptive text-center text-gray-500 text-sm">
             <p>© 2024 Finspark 投资分析系统 | Powered by VectorEngine AI</p>
         </div>
     </footer>
@@ -596,6 +698,7 @@ app.get('/', (c) => {
             document.getElementById('authButtons').classList.remove('hidden');
             document.getElementById('userMenu').classList.add('hidden');
             updateQuotaDisplay();
+            updateMobileAuthUI(); // 同步移动端状态
         }
         
         function showUserUI(user) {
@@ -604,6 +707,7 @@ app.get('/', (c) => {
             document.getElementById('userName').textContent = user.nickname || user.name || user.email;
             updateQuotaDisplay();
             updateTierBadge(user);
+            updateMobileAuthUI(); // 同步移动端状态
         }
         
         // 更新配额显示
@@ -765,6 +869,53 @@ app.get('/', (c) => {
         }
         function switchModal(from, to) { hideModal(from); showModal(to); }
         function toggleDropdown() { document.getElementById('userDropdown').classList.toggle('active'); }
+        
+        // 移动端菜单控制
+        function toggleMobileMenu() {
+            document.getElementById('mobileMenuOverlay')?.classList.add('open');
+            document.getElementById('mobileMenuPanel')?.classList.add('open');
+            document.body.style.overflow = 'hidden';
+        }
+        
+        function closeMobileMenu() {
+            document.getElementById('mobileMenuOverlay')?.classList.remove('open');
+            document.getElementById('mobileMenuPanel')?.classList.remove('open');
+            document.body.style.overflow = '';
+        }
+        
+        // 更新移动端用户信息
+        function updateMobileAuthUI() {
+            const mobileAuthButtons = document.getElementById('mobileAuthButtons');
+            const mobileUserInfo = document.getElementById('mobileUserInfo');
+            const mobileLogoutSection = document.getElementById('mobileLogoutSection');
+            
+            if (!mobileAuthButtons || !mobileUserInfo) return;
+            
+            if (currentUser) {
+                mobileAuthButtons.classList.add('hidden');
+                mobileUserInfo.classList.remove('hidden');
+                mobileLogoutSection?.classList.remove('hidden');
+                
+                const mobileUserName = document.getElementById('mobileUserName');
+                const mobileTierBadge = document.getElementById('mobileTierBadge');
+                const mobileQuotaDisplay = document.getElementById('mobileQuotaDisplay');
+                
+                if (mobileUserName) mobileUserName.textContent = currentUser.name || currentUser.email;
+                if (mobileTierBadge) {
+                    const tierMap = { free: '免费', pro: 'Pro', elite: 'Elite' };
+                    const colorMap = { free: 'bg-blue-600', pro: 'bg-purple-600', elite: 'bg-gradient-to-r from-yellow-500 to-yellow-600' };
+                    mobileTierBadge.textContent = tierMap[currentUser.membership_tier] || '免费';
+                    mobileTierBadge.className = 'text-xs px-2 py-0.5 rounded ' + (colorMap[currentUser.membership_tier] || 'bg-blue-600');
+                }
+                if (mobileQuotaDisplay && document.getElementById('quotaDisplay')) {
+                    mobileQuotaDisplay.textContent = document.getElementById('quotaDisplay').textContent;
+                }
+            } else {
+                mobileAuthButtons.classList.remove('hidden');
+                mobileUserInfo.classList.add('hidden');
+                mobileLogoutSection?.classList.add('hidden');
+            }
+        }
         
         // 登录
         async function handleLogin(e) {
@@ -1095,7 +1246,20 @@ app.get('/', (c) => {
                     return;
                 }
             }
-            window.location.href = \`/analysis?code=\${selectedStock.code}&name=\${encodeURIComponent(selectedStock.name)}\`;
+            
+            // 获取分析配置参数
+            let configParams = '';
+            if (typeof getAnalysisPresetOverrides === 'function') {
+                const overrides = getAnalysisPresetOverrides();
+                if (overrides && overrides.globalPresetId) {
+                    configParams = \`&presetId=\${overrides.globalPresetId}\`;
+                }
+                if (overrides && overrides.globalModelPreference) {
+                    configParams += \`&model=\${overrides.globalModelPreference}\`;
+                }
+            }
+            
+            window.location.href = \`/analysis?code=\${selectedStock.code}&name=\${encodeURIComponent(selectedStock.name)}\${configParams}\`;
         }
         
         // 事件绑定 - 降低防抖延迟以加速响应
@@ -1110,9 +1274,12 @@ app.get('/', (c) => {
         searchBtn.addEventListener('click', startAnalysis);
         searchInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') startAnalysis(); });
         
+        ${analysisConfigScript}
+        
         // 初始化
         checkAuth();
         loadHotStocks();
+        loadAnalysisConfig();
     </script>
     
     <!-- 悬浮智能问数助手 -->
@@ -1179,12 +1346,16 @@ app.get('/analysis', (c) => {
         .chart-legend { display: flex; align-items: center; gap: 16px; font-size: 12px; color: #9ca3af; }
         .chart-legend-item { display: flex; align-items: center; gap: 4px; }
         .chart-legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+        /* 响应式图表高度 */
+        @media (max-width: 767px) { .chart-container { height: 260px; } }
         ${floatingAssistantStyles}
+        ${responsiveStyles}
     </style>
 </head>
 <body class="text-white">
-    <nav class="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-md border-b border-gray-800">
-        <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+    <!-- 桌面端导航栏 -->
+    <nav class="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-md border-b border-gray-800 hide-on-mobile">
+        <div class="container-adaptive py-4 flex items-center justify-between">
             <a href="/" class="flex items-center space-x-3">
                 <i class="fas fa-chart-line text-2xl gold-text"></i>
                 <span class="text-xl font-bold gold-gradient">Finspark 投资分析</span>
@@ -1199,35 +1370,53 @@ app.get('/analysis', (c) => {
             </div>
         </div>
     </nav>
+    
+    <!-- 移动端导航栏 -->
+    <nav class="mobile-nav show-on-mobile">
+        <div class="px-4 py-3 flex items-center justify-between">
+            <a href="/" class="flex items-center space-x-2">
+                <i class="fas fa-arrow-left text-gray-400"></i>
+                <span class="text-lg font-bold gold-gradient">Finspark</span>
+            </a>
+            <div class="flex items-center space-x-2">
+                <button id="shareBtnMobile" onclick="createShareLink()" class="p-2 text-gray-400 hover:text-white touch-target hidden">
+                    <i class="fas fa-share-alt text-lg"></i>
+                </button>
+                <button id="favoriteBtnMobile" class="p-2 text-gray-400 hover:text-white touch-target hidden">
+                    <i class="far fa-heart text-lg"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
 
-    <main class="pt-24 pb-16 px-4">
-        <div class="max-w-6xl mx-auto">
+    <main class="pt-adaptive-header pb-8 md:pb-16">
+        <div class="container-adaptive">
             <!-- 公司信息头部 -->
-            <div class="card rounded-xl p-6 mb-8">
-                <div class="flex items-center justify-between flex-wrap gap-4">
+            <div class="card rounded-xl p-4 md:p-6 mb-6 md:mb-8">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                     <div>
-                        <h1 id="companyName" class="text-3xl font-bold gold-gradient">加载中...</h1>
-                        <p id="companyCode" class="text-gray-400 mt-1"></p>
+                        <h1 id="companyName" class="text-2xl md:text-3xl font-bold gold-gradient">加载中...</h1>
+                        <p id="companyCode" class="text-gray-400 mt-1 text-sm md:text-base"></p>
                     </div>
-                    <div class="flex items-center gap-4">
-                        <div id="analysisStatus" class="text-right">
-                            <div class="text-sm text-gray-400">分析状态</div>
-                            <div class="text-lg gold-text font-semibold">准备中</div>
+                    <div class="flex flex-wrap items-center gap-2 sm:gap-4">
+                        <div id="analysisStatus" class="text-left sm:text-right">
+                            <div class="text-xs sm:text-sm text-gray-400">分析状态</div>
+                            <div class="text-base sm:text-lg gold-text font-semibold">准备中</div>
                         </div>
-                        <button id="compareBtn" onclick="showCompareModal()" class="hidden px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-lg font-semibold transition-all duration-300 shadow-lg hover:shadow-purple-500/25 flex items-center gap-2">
+                        <button id="compareBtn" onclick="showCompareModal()" class="hidden px-3 sm:px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-lg font-semibold transition-all duration-300 shadow-lg hover:shadow-purple-500/25 flex items-center gap-1 sm:gap-2 text-sm">
                             <i class="fas fa-exchange-alt"></i>
-                            <span>历史对比</span>
+                            <span class="hidden sm:inline">历史对比</span>
                         </button>
-                        <button id="reanalyzeBtn" onclick="forceReanalyze()" class="hidden px-4 py-2 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 text-white rounded-lg font-semibold transition-all duration-300 shadow-lg hover:shadow-orange-500/25 flex items-center gap-2">
+                        <button id="reanalyzeBtn" onclick="forceReanalyze()" class="hidden px-3 sm:px-4 py-2 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 text-white rounded-lg font-semibold transition-all duration-300 shadow-lg hover:shadow-orange-500/25 flex items-center gap-1 sm:gap-2 text-sm">
                             <i class="fas fa-sync-alt"></i>
-                            <span>重新分析</span>
+                            <span class="hidden sm:inline">重新分析</span>
                         </button>
                     </div>
                 </div>
                 
                 <!-- 进度条 -->
-                <div class="mt-6">
-                    <div class="flex justify-between text-sm text-gray-400 mb-2">
+                <div class="mt-4 md:mt-6">
+                    <div class="flex justify-between text-xs sm:text-sm text-gray-400 mb-2">
                         <span id="currentPhase">初始化</span>
                         <span id="progressPercent">0%</span>
                     </div>
@@ -1237,47 +1426,47 @@ app.get('/analysis', (c) => {
                 </div>
             </div>
 
-            <!-- Agent执行状态 -->
-            <div class="grid grid-cols-5 gap-3 mb-8" id="agentStatus">
-                <div class="agent-item card rounded-lg p-3 text-center border-2 border-gray-700">
-                    <i class="fas fa-clipboard-list gold-text mb-2"></i>
-                    <div class="text-xs text-gray-400">分析规划</div>
+            <!-- Agent执行状态 (A+D混合模式：5列紧凑，手机只显示图标) -->
+            <div class="grid grid-cols-5 gap-1.5 sm:gap-3 mb-6 md:mb-8" id="agentStatus">
+                <div class="agent-item card rounded-lg p-2 sm:p-3 text-center border-2 border-gray-700" title="分析规划">
+                    <i class="fas fa-clipboard-list gold-text text-sm sm:text-base mb-0 sm:mb-2"></i>
+                    <div class="hidden sm:block text-xs text-gray-400">分析规划</div>
                 </div>
-                <div class="agent-item card rounded-lg p-3 text-center border-2 border-gray-700">
-                    <i class="fas fa-chart-line gold-text mb-2"></i>
-                    <div class="text-xs text-gray-400">利润表</div>
+                <div class="agent-item card rounded-lg p-2 sm:p-3 text-center border-2 border-gray-700" title="利润表">
+                    <i class="fas fa-chart-line gold-text text-sm sm:text-base mb-0 sm:mb-2"></i>
+                    <div class="hidden sm:block text-xs text-gray-400">利润表</div>
                 </div>
-                <div class="agent-item card rounded-lg p-3 text-center border-2 border-gray-700">
-                    <i class="fas fa-balance-scale gold-text mb-2"></i>
-                    <div class="text-xs text-gray-400">资产负债表</div>
+                <div class="agent-item card rounded-lg p-2 sm:p-3 text-center border-2 border-gray-700" title="资产负债表">
+                    <i class="fas fa-balance-scale gold-text text-sm sm:text-base mb-0 sm:mb-2"></i>
+                    <div class="hidden sm:block text-xs text-gray-400">资产负债</div>
                 </div>
-                <div class="agent-item card rounded-lg p-3 text-center border-2 border-gray-700">
-                    <i class="fas fa-money-bill-wave gold-text mb-2"></i>
-                    <div class="text-xs text-gray-400">现金流</div>
+                <div class="agent-item card rounded-lg p-2 sm:p-3 text-center border-2 border-gray-700" title="现金流">
+                    <i class="fas fa-money-bill-wave gold-text text-sm sm:text-base mb-0 sm:mb-2"></i>
+                    <div class="hidden sm:block text-xs text-gray-400">现金流</div>
                 </div>
-                <div class="agent-item card rounded-lg p-3 text-center border-2 border-gray-700">
-                    <i class="fas fa-link gold-text mb-2"></i>
-                    <div class="text-xs text-gray-400">三表联动</div>
+                <div class="agent-item card rounded-lg p-2 sm:p-3 text-center border-2 border-gray-700" title="三表联动">
+                    <i class="fas fa-link gold-text text-sm sm:text-base mb-0 sm:mb-2"></i>
+                    <div class="hidden sm:block text-xs text-gray-400">三表联动</div>
                 </div>
-                <div class="agent-item card rounded-lg p-3 text-center border-2 border-gray-700">
-                    <i class="fas fa-exclamation-triangle gold-text mb-2"></i>
-                    <div class="text-xs text-gray-400">风险评估</div>
+                <div class="agent-item card rounded-lg p-2 sm:p-3 text-center border-2 border-gray-700" title="风险评估">
+                    <i class="fas fa-exclamation-triangle gold-text text-sm sm:text-base mb-0 sm:mb-2"></i>
+                    <div class="hidden sm:block text-xs text-gray-400">风险评估</div>
                 </div>
-                <div class="agent-item card rounded-lg p-3 text-center border-2 border-gray-700">
-                    <i class="fas fa-building gold-text mb-2"></i>
-                    <div class="text-xs text-gray-400">业务洞察</div>
+                <div class="agent-item card rounded-lg p-2 sm:p-3 text-center border-2 border-gray-700" title="业务洞察">
+                    <i class="fas fa-building gold-text text-sm sm:text-base mb-0 sm:mb-2"></i>
+                    <div class="hidden sm:block text-xs text-gray-400">业务洞察</div>
                 </div>
-                <div class="agent-item card rounded-lg p-3 text-center border-2 border-gray-700">
-                    <i class="fas fa-lightbulb gold-text mb-2"></i>
-                    <div class="text-xs text-gray-400">商业模式</div>
+                <div class="agent-item card rounded-lg p-2 sm:p-3 text-center border-2 border-gray-700" title="商业模式">
+                    <i class="fas fa-lightbulb gold-text text-sm sm:text-base mb-0 sm:mb-2"></i>
+                    <div class="hidden sm:block text-xs text-gray-400">商业模式</div>
                 </div>
-                <div class="agent-item card rounded-lg p-3 text-center border-2 border-gray-700">
-                    <i class="fas fa-chart-bar gold-text mb-2"></i>
-                    <div class="text-xs text-gray-400">业绩预测</div>
+                <div class="agent-item card rounded-lg p-2 sm:p-3 text-center border-2 border-gray-700" title="业绩预测">
+                    <i class="fas fa-chart-bar gold-text text-sm sm:text-base mb-0 sm:mb-2"></i>
+                    <div class="hidden sm:block text-xs text-gray-400">业绩预测</div>
                 </div>
-                <div class="agent-item card rounded-lg p-3 text-center border-2 border-gray-700">
-                    <i class="fas fa-gavel gold-text mb-2"></i>
-                    <div class="text-xs text-gray-400">投资结论</div>
+                <div class="agent-item card rounded-lg p-2 sm:p-3 text-center border-2 border-gray-700" title="投资结论">
+                    <i class="fas fa-gavel gold-text text-sm sm:text-base mb-0 sm:mb-2"></i>
+                    <div class="hidden sm:block text-xs text-gray-400">投资结论</div>
                 </div>
             </div>
 
@@ -1343,12 +1532,12 @@ app.get('/analysis', (c) => {
             <!-- 分析结果区域 -->
             <div id="analysisResults" class="hidden">
                 <!-- 操作按钮 -->
-                <div id="actionButtons" class="flex gap-4 mb-6 flex-wrap items-center">
+                <div id="actionButtons" class="flex gap-2 sm:gap-4 mb-4 md:mb-6 flex-wrap items-center">
                     <!-- PDF导出下拉按钮 -->
                     <div class="relative inline-block" id="pdfDropdown">
-                        <button id="exportPdfBtn" class="btn-gold px-6 py-3 rounded-lg flex items-center">
-                            <i class="fas fa-file-pdf mr-2"></i>导出 PDF 报告
-                            <i class="fas fa-chevron-down ml-2 text-xs"></i>
+                        <button id="exportPdfBtn" class="btn-gold px-3 sm:px-6 py-2 sm:py-3 rounded-lg flex items-center text-sm sm:text-base">
+                            <i class="fas fa-file-pdf sm:mr-2"></i><span class="hidden sm:inline">导出 PDF 报告</span>
+                            <i class="fas fa-chevron-down ml-1 sm:ml-2 text-xs"></i>
                         </button>
                         <div id="pdfDropdownMenu" class="hidden absolute left-0 mt-2 w-64 rounded-lg shadow-xl bg-gray-800 border border-gray-600 z-50">
                             <div class="py-2">
@@ -1369,22 +1558,22 @@ app.get('/analysis', (c) => {
                             </div>
                         </div>
                     </div>
-                    <button id="generateComicBtn" class="btn-outline px-6 py-3 rounded-lg flex items-center pro-feature" onclick="showComicConfigModal()">
+                    <button id="generateComicBtn" class="btn-outline px-3 sm:px-6 py-2 sm:py-3 rounded-lg flex items-center pro-feature text-sm sm:text-base" onclick="showComicConfigModal()">
                         <span class="feature-lock-badge">Pro</span>
-                        <i class="fas fa-palette mr-2"></i>生成漫画解读版
+                        <i class="fas fa-palette sm:mr-2"></i><span class="hidden sm:inline">生成漫画解读版</span>
                     </button>
-                    <button id="viewComicBtn" class="btn-outline px-6 py-3 rounded-lg flex items-center hidden">
-                        <i class="fas fa-images mr-2"></i>查看漫画
+                    <button id="viewComicBtn" class="btn-outline px-3 sm:px-6 py-2 sm:py-3 rounded-lg flex items-center hidden text-sm sm:text-base">
+                        <i class="fas fa-images sm:mr-2"></i><span class="hidden sm:inline">查看漫画</span>
                     </button>
                 </div>
 
                 <!-- 投资建议摘要（整合关键要点） -->
-                <div id="summaryCard" class="card rounded-xl p-6 mb-6">
-                    <h2 class="text-xl font-bold gold-text mb-4">
+                <div id="summaryCard" class="card rounded-xl p-4 md:p-6 mb-4 md:mb-6">
+                    <h2 class="text-lg md:text-xl font-bold gold-text mb-3 md:mb-4">
                         <i class="fas fa-star mr-2"></i>投资建议摘要
                     </h2>
                     <!-- 核心指标区 -->
-                    <div id="summaryContent" class="grid md:grid-cols-4 gap-4 mb-6">
+                    <div id="summaryContent" class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-4 md:mb-6">
                         <!-- 动态填充 -->
                     </div>
                     <!-- 关键要点区（整合进来） -->
@@ -1403,7 +1592,7 @@ app.get('/analysis', (c) => {
                 </div>
 
                 <!-- 商业模式与护城河分析（独立模块） -->
-                <div id="moatCard" class="card rounded-xl p-6 mb-6 border-l-4 border-yellow-500 bg-gradient-to-br from-gray-900 to-gray-800">
+                <div id="moatCard" class="card rounded-xl p-4 md:p-6 mb-4 md:mb-6 border-l-4 border-yellow-500 bg-gradient-to-br from-gray-900 to-gray-800">
                     <div class="flex items-center justify-between mb-6">
                         <h2 class="text-xl font-bold gold-text">
                             <i class="fas fa-chess-rook mr-2"></i>商业模式与护城河
@@ -1469,7 +1658,7 @@ app.get('/analysis', (c) => {
                 </div>
 
                 <!-- 业务洞察（放在商业模式之后、财报数据之前） -->
-                <div id="businessInsightCard" class="card rounded-xl p-6 mb-6 border-l-4 border-cyan-500 bg-gradient-to-br from-gray-900 to-gray-800">
+                <div id="businessInsightCard" class="card rounded-xl p-4 md:p-6 mb-4 md:mb-6 border-l-4 border-cyan-500 bg-gradient-to-br from-gray-900 to-gray-800">
                     <div class="flex items-center justify-between mb-4">
                         <h2 class="text-xl font-bold gold-text">
                             <i class="fas fa-lightbulb mr-2"></i>业务洞察
@@ -1487,7 +1676,7 @@ app.get('/analysis', (c) => {
                 </div>
 
                 <!-- 财报数据分析（原盈利能力分析，全宽展示） -->
-                <div id="profitabilityCard" class="card rounded-xl p-6 mb-6 border-l-4 border-blue-500 bg-gradient-to-br from-gray-900 to-gray-800">
+                <div id="profitabilityCard" class="card rounded-xl p-4 md:p-6 mb-4 md:mb-6 border-l-4 border-blue-500 bg-gradient-to-br from-gray-900 to-gray-800">
                     <div class="flex items-center justify-between mb-4">
                         <h2 class="text-xl font-bold gold-text">
                             <i class="fas fa-file-invoice-dollar mr-2"></i>财报数据分析
@@ -1700,7 +1889,7 @@ app.get('/analysis', (c) => {
                 </div>
                 
                 <!-- 风险评估（移到财报分析下方，全宽展示） -->
-                <div id="riskCard" class="card rounded-xl p-6 mb-6 border-l-4 border-red-500 bg-gradient-to-br from-gray-900 to-gray-800">
+                <div id="riskCard" class="card rounded-xl p-4 md:p-6 mb-4 md:mb-6 border-l-4 border-red-500 bg-gradient-to-br from-gray-900 to-gray-800">
                     <div class="flex items-center justify-between mb-4">
                         <h2 class="text-xl font-bold gold-text">
                             <i class="fas fa-shield-alt mr-2"></i>风险评估
@@ -1713,7 +1902,7 @@ app.get('/analysis', (c) => {
                 </div>
 
                 <!-- 业绩预测（放在风险评估之后、估值评估之前） -->
-                <div id="forecastCard" class="card rounded-xl p-6 mb-6 border-l-4 border-emerald-500 bg-gradient-to-br from-gray-900 to-gray-800">
+                <div id="forecastCard" class="card rounded-xl p-4 md:p-6 mb-4 md:mb-6 border-l-4 border-emerald-500 bg-gradient-to-br from-gray-900 to-gray-800">
                     <div class="flex items-center justify-between mb-4">
                         <h2 class="text-xl font-bold gold-text">
                             <i class="fas fa-chart-line mr-2"></i>业绩预测
@@ -1731,7 +1920,7 @@ app.get('/analysis', (c) => {
                 </div>
 
                 <!-- 估值评估（独立模块，完整展示估值分析过程） -->
-                <div id="valuationCard" class="card rounded-xl p-6 mb-6 border-l-4 border-purple-500 bg-gradient-to-br from-gray-900 to-gray-800">
+                <div id="valuationCard" class="card rounded-xl p-4 md:p-6 mb-4 md:mb-6 border-l-4 border-purple-500 bg-gradient-to-br from-gray-900 to-gray-800">
                     <div class="flex items-center justify-between mb-4">
                         <h2 class="text-xl font-bold gold-text">
                             <i class="fas fa-calculator mr-2"></i>估值评估
@@ -1746,7 +1935,7 @@ app.get('/analysis', (c) => {
                 <!-- 关键要点已整合到投资建议摘要中 -->
 
                 <!-- 行业对比分析面板 -->
-                <div id="industryComparisonCard" class="card rounded-xl p-6 mb-6 border-l-4 border-orange-500 bg-gradient-to-br from-gray-900 to-gray-800">
+                <div id="industryComparisonCard" class="card rounded-xl p-4 md:p-6 mb-4 md:mb-6 border-l-4 border-orange-500 bg-gradient-to-br from-gray-900 to-gray-800">
                     <div class="flex items-center justify-between mb-4">
                         <h2 class="text-xl font-bold gold-text">
                             <i class="fas fa-chart-bar mr-2"></i>行业对比分析
@@ -2329,6 +2518,8 @@ app.get('/analysis', (c) => {
         const urlParams = new URLSearchParams(window.location.search);
         const code = urlParams.get('code');
         const name = urlParams.get('name');
+        const presetIdFromUrl = urlParams.get('presetId');
+        const modelFromUrl = urlParams.get('model');
         
         if (!code) {
             window.location.href = '/';
@@ -2337,6 +2528,14 @@ app.get('/analysis', (c) => {
         // 全局状态
         let currentReportId = null;
         let currentReport = null;
+        let analysisPresetOverrides = null;
+        
+        // 初始化分析配置覆盖（如果URL中有配置参数）
+        if (presetIdFromUrl || modelFromUrl) {
+            analysisPresetOverrides = {};
+            if (presetIdFromUrl) analysisPresetOverrides.globalPresetId = parseInt(presetIdFromUrl);
+            if (modelFromUrl) analysisPresetOverrides.globalModelPreference = modelFromUrl;
+        }
         
         // 为智能助手暴露全局变量
         window.currentStockCode = code;
@@ -2508,18 +2707,27 @@ app.get('/analysis', (c) => {
                     ...getAuthHeaders()
                 };
                 
+                // 构建请求体，包含分析配置参数
+                const requestBody = {
+                    companyCode: code,
+                    companyName: name,
+                    reportType: 'annual',
+                    options: {
+                        includeBusinessModel: true,
+                        includeForecast: true,
+                    }
+                };
+                
+                // 如果有配置覆盖参数，添加到请求中
+                if (analysisPresetOverrides) {
+                    requestBody.presetOverrides = analysisPresetOverrides;
+                    console.log('[Analysis Config] Using preset overrides:', analysisPresetOverrides);
+                }
+                
                 const response = await fetch('/api/analyze/start', {
                     method: 'POST',
                     headers,
-                    body: JSON.stringify({
-                        companyCode: code,
-                        companyName: name,
-                        reportType: 'annual',
-                        options: {
-                            includeBusinessModel: true,
-                            includeForecast: true,
-                        }
-                    })
+                    body: JSON.stringify(requestBody)
                 });
                 
                 const data = await response.json();
@@ -2944,8 +3152,10 @@ app.get('/analysis', (c) => {
                         \`;
                         displayResults(report);
                         document.getElementById('favoriteBtn').classList.remove('hidden');
+                        document.getElementById('favoriteBtnMobile')?.classList.remove('hidden');
                         // 显示分享按钮
                         document.getElementById('shareBtn').classList.remove('hidden');
+                        document.getElementById('shareBtnMobile')?.classList.remove('hidden');
                         // 显示重新分析按钮，方便用户使用最新模型更新报告
                         document.getElementById('reanalyzeBtn').classList.remove('hidden');
                         // 显示历史对比按钮
@@ -8209,11 +8419,13 @@ app.get('/my-reports', (c) => {
         @keyframes slideIn { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
         .toast-out { animation: fadeOut 0.3s ease forwards; }
+        ${responsiveStyles}
     </style>
 </head>
 <body class="text-white">
-    <nav class="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-md border-b border-gray-800">
-        <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+    <!-- 桌面端导航栏 -->
+    <nav class="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-md border-b border-gray-800 hide-on-mobile">
+        <div class="container-adaptive py-4 flex items-center justify-between">
             <a href="/" class="flex items-center space-x-3">
                 <i class="fas fa-chart-line text-2xl gold-text"></i>
                 <span class="text-xl font-bold gold-gradient">Finspark 投资分析</span>
@@ -8226,33 +8438,51 @@ app.get('/my-reports', (c) => {
             </div>
         </div>
     </nav>
+    
+    <!-- 移动端导航栏 -->
+    <nav class="mobile-nav show-on-mobile bg-black/80 backdrop-blur-md border-b border-gray-800">
+        <div class="px-4 py-3 flex items-center justify-between">
+            <a href="/" class="flex items-center space-x-2">
+                <i class="fas fa-chart-line text-xl gold-text"></i>
+                <span class="text-lg font-bold gold-gradient">Finspark</span>
+            </a>
+            <div class="flex items-center space-x-2">
+                <a href="/" class="p-2 text-gray-400 hover:text-white touch-target">
+                    <i class="fas fa-home text-lg"></i>
+                </a>
+                <a href="/favorites" class="p-2 text-gray-400 hover:text-white touch-target">
+                    <i class="fas fa-heart text-lg"></i>
+                </a>
+            </div>
+        </div>
+    </nav>
 
-    <main class="pt-24 pb-16 px-4">
-        <div class="max-w-6xl mx-auto">
+    <main class="pt-adaptive-header pb-8 md:pb-16">
+        <div class="container-adaptive">
             <!-- 页面标题 -->
-            <div class="flex items-center justify-between mb-6">
-                <h1 class="text-3xl font-bold gold-gradient"><i class="fas fa-chart-pie mr-3"></i>我的分析</h1>
-                <a href="/" class="btn-gold px-4 py-2 rounded-lg text-sm hover:shadow-lg transition-all"><i class="fas fa-plus mr-2"></i>新建分析</a>
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 md:mb-6">
+                <h1 class="text-2xl md:text-3xl font-bold gold-gradient"><i class="fas fa-chart-pie mr-2 md:mr-3"></i>我的分析</h1>
+                <a href="/" class="btn-gold px-4 py-2 rounded-lg text-sm hover:shadow-lg transition-all w-full sm:w-auto text-center"><i class="fas fa-plus mr-2"></i>新建分析</a>
             </div>
             
             <!-- 统计卡片 -->
-            <div id="statsSection" class="grid grid-cols-3 gap-4 mb-6 hidden">
-                <div class="stats-card rounded-xl p-4 text-center">
-                    <div class="text-3xl font-bold gold-text" id="totalAnalyses">0</div>
-                    <div class="text-sm text-gray-400">总分析数</div>
+            <div id="statsSection" class="grid grid-cols-3 gap-2 md:gap-4 mb-4 md:mb-6 hidden">
+                <div class="stats-card rounded-xl p-3 md:p-4 text-center">
+                    <div class="text-xl md:text-3xl font-bold gold-text" id="totalAnalyses">0</div>
+                    <div class="text-xs md:text-sm text-gray-400">总分析数</div>
                 </div>
-                <div class="stats-card rounded-xl p-4 text-center">
-                    <div class="text-3xl font-bold text-green-400" id="completedCount">0</div>
-                    <div class="text-sm text-gray-400">已完成</div>
+                <div class="stats-card rounded-xl p-3 md:p-4 text-center">
+                    <div class="text-xl md:text-3xl font-bold text-green-400" id="completedCount">0</div>
+                    <div class="text-xs md:text-sm text-gray-400">已完成</div>
                 </div>
-                <div class="stats-card rounded-xl p-4 text-center">
-                    <div class="text-3xl font-bold gold-text" id="comicCount">0</div>
-                    <div class="text-sm text-gray-400">漫画解读</div>
+                <div class="stats-card rounded-xl p-3 md:p-4 text-center">
+                    <div class="text-xl md:text-3xl font-bold gold-text" id="comicCount">0</div>
+                    <div class="text-xs md:text-sm text-gray-400">漫画解读</div>
                 </div>
             </div>
             
             <!-- 筛选工具栏 -->
-            <div id="filterToolbar" class="hidden mb-6 p-4 bg-gray-900/50 rounded-xl border border-gray-800">
+            <div id="filterToolbar" class="hidden mb-4 md:mb-6 p-3 md:p-4 bg-gray-900/50 rounded-xl border border-gray-800">
                 <div class="flex flex-wrap items-center gap-3">
                     <!-- 日期范围 -->
                     <div class="flex items-center gap-2">
@@ -8859,11 +9089,13 @@ app.get('/favorites', (c) => {
         .tag-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(212, 175, 55, 0.2); color: #d4af37; }
         @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         .animate-slide { animation: slideIn 0.3s ease-out; }
+        ${responsiveStyles}
     </style>
 </head>
 <body class="text-white">
-    <nav class="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-md border-b border-gray-800">
-        <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+    <!-- 桌面端导航栏 -->
+    <nav class="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-md border-b border-gray-800 hide-on-mobile">
+        <div class="container-adaptive py-4 flex items-center justify-between">
             <a href="/" class="flex items-center space-x-3">
                 <i class="fas fa-chart-line text-2xl gold-text"></i>
                 <span class="text-xl font-bold gold-gradient">Finspark 投资分析</span>
@@ -8876,12 +9108,30 @@ app.get('/favorites', (c) => {
             </div>
         </div>
     </nav>
+    
+    <!-- 移动端导航栏 -->
+    <nav class="mobile-nav show-on-mobile bg-black/80 backdrop-blur-md border-b border-gray-800">
+        <div class="px-4 py-3 flex items-center justify-between">
+            <a href="/" class="flex items-center space-x-2">
+                <i class="fas fa-chart-line text-xl gold-text"></i>
+                <span class="text-lg font-bold gold-gradient">Finspark</span>
+            </a>
+            <div class="flex items-center space-x-2">
+                <a href="/" class="p-2 text-gray-400 hover:text-white touch-target">
+                    <i class="fas fa-home text-lg"></i>
+                </a>
+                <a href="/my-reports" class="p-2 text-gray-400 hover:text-white touch-target">
+                    <i class="fas fa-chart-pie text-lg"></i>
+                </a>
+            </div>
+        </div>
+    </nav>
 
-    <main class="pt-24 pb-16 px-4">
-        <div class="max-w-6xl mx-auto">
+    <main class="pt-adaptive-header pb-8 md:pb-16">
+        <div class="container-adaptive">
             <!-- 页面标题与操作 -->
-            <div class="flex items-center justify-between mb-6">
-                <h1 class="text-3xl font-bold gold-gradient"><i class="fas fa-heart mr-3"></i>我的收藏</h1>
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 md:mb-6">
+                <h1 class="text-2xl md:text-3xl font-bold gold-gradient"><i class="fas fa-heart mr-2 md:mr-3"></i>我的收藏</h1>
                 <div class="flex items-center gap-3">
                     <span id="favCount" class="text-sm text-gray-400">0 个收藏</span>
                     <button onclick="toggleSelectMode()" id="selectModeBtn" class="btn-secondary px-3 py-1.5 rounded-lg text-sm">
