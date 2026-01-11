@@ -7,10 +7,11 @@ import { createStockDBService } from '../services/stockdb';
 import { createReportsService } from '../services/reports';
 import { createComicService } from '../services/comic';
 import { createDataSyncService } from '../services/dataSync';
+import { createAgentPresetsService } from '../services/agentPresets';
 import { createOrchestrator } from '../agents/orchestrator';
 import { AGENT_PROMPTS } from '../agents/prompts';
 import { optionalAuthMiddleware, optionalAuth, requireFeature } from '../middleware/auth';
-import type { Bindings, StartAnalysisRequest, AnalysisProgress, AnalysisReport } from '../types';
+import type { Bindings, StartAnalysisRequest, AnalysisProgress, AnalysisReport, AgentType, ModelPreference } from '../types';
 
 const api = new Hono<{ Bindings: Bindings }>();
 
@@ -436,13 +437,39 @@ api.post('/analyze/start', optionalAuthMiddleware(), async (c) => {
     const vectorEngineApiKey = c.env.VECTORENGINE_API_KEY;
     const currentReportsService = reportsService;
 
+    // ============ Phase 1: 加载用户 Preset 配置 ============
+    let effectiveModelConfig = body.agentModelConfig || {};
+    
+    // 如果有数据库和用户登录，加载用户的 Preset/Settings 配置
+    if (db && userId) {
+      try {
+        const presetsService = createAgentPresetsService(db);
+        const analysisConfigs = await presetsService.getAllAnalysisConfigs(
+          userId,
+          body.presetOverrides as Record<AgentType, { presetId?: number; modelPreference?: ModelPreference }>
+        );
+        
+        // 将 Preset 配置转换为 AgentModelConfig
+        for (const [agentType, config] of Object.entries(analysisConfigs)) {
+          if (config.modelPreference && !effectiveModelConfig[agentType as keyof typeof effectiveModelConfig]) {
+            (effectiveModelConfig as any)[agentType] = config.modelPreference;
+          }
+        }
+        
+        console.log(`[Preset] Loaded user presets for ${Object.keys(analysisConfigs).length} agents`);
+      } catch (presetError) {
+        console.error('[Preset] Failed to load user presets:', presetError);
+        // 继续使用默认配置
+      }
+    }
+
     // 创建编排器并开始分析 - 带进度回调
-    // Phase 0: 支持 Agent 独立模型配置
+    // Phase 0/1: 支持 Agent 独立模型配置 + Preset 系统
     const orchestrator = createOrchestrator({
       vectorEngine,
       tushare,
       cache,  // 用于趋势解读缓存
-      agentModelConfig: body.agentModelConfig,  // 用户自定义 Agent 模型配置
+      agentModelConfig: effectiveModelConfig,  // 合并后的 Agent 模型配置
       onProgress: async (progress) => {
         // 实时更新进度到 KV/D1
         if (currentReportsService) {
@@ -898,13 +925,36 @@ api.post('/analyze/force-reanalyze', optionalAuthMiddleware(), async (c) => {
     const vectorEngineApiKey = c.env.VECTORENGINE_API_KEY;
     const currentReportsService = reportsService;
 
+    // ============ Phase 1: 加载用户 Preset 配置 ============
+    let effectiveModelConfig = body.agentModelConfig || {};
+    
+    if (db && userId) {
+      try {
+        const presetsService = createAgentPresetsService(db);
+        const analysisConfigs = await presetsService.getAllAnalysisConfigs(
+          userId,
+          body.presetOverrides as Record<AgentType, { presetId?: number; modelPreference?: ModelPreference }>
+        );
+        
+        for (const [agentType, config] of Object.entries(analysisConfigs)) {
+          if (config.modelPreference && !effectiveModelConfig[agentType as keyof typeof effectiveModelConfig]) {
+            (effectiveModelConfig as any)[agentType] = config.modelPreference;
+          }
+        }
+        
+        console.log(`[Preset] Loaded user presets for force-reanalyze`);
+      } catch (presetError) {
+        console.error('[Preset] Failed to load user presets:', presetError);
+      }
+    }
+
     // 创建编排器
-    // Phase 0: 支持 Agent 独立模型配置
+    // Phase 0/1: 支持 Agent 独立模型配置 + Preset 系统
     const orchestrator = createOrchestrator({
       vectorEngine,
       tushare,
       cache,  // 用于趋势解读缓存
-      agentModelConfig: body.agentModelConfig,  // 用户自定义 Agent 模型配置
+      agentModelConfig: effectiveModelConfig,  // 合并后的 Agent 模型配置
       onProgress: async (progress) => {
         if (currentReportsService) {
           await currentReportsService.updateProgress(reportId, progress);

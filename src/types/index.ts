@@ -450,8 +450,14 @@ export interface ComicPanel {
 }
 
 // ============ Agent 模型配置类型 ============
-import type { AgentModelConfig, ModelPreference } from '../services/vectorengine';
-export type { AgentModelConfig, ModelPreference };
+import type { AgentModelConfig, ModelPreference, AgentType } from '../services/vectorengine';
+export type { AgentModelConfig, ModelPreference, AgentType };
+
+// ============ Preset 覆盖配置 ============
+export interface PresetOverride {
+  presetId?: number;
+  modelPreference?: ModelPreference;
+}
 
 // ============ API 请求/响应类型 ============
 export interface StartAnalysisRequest {
@@ -466,6 +472,8 @@ export interface StartAnalysisRequest {
   };
   /** Phase 0: Agent 独立模型配置 - 允许用户为每个 Agent 指定不同的模型偏好 */
   agentModelConfig?: AgentModelConfig;
+  /** Phase 1: Preset 覆盖 - 允许用户在单次分析中临时使用特定 Preset */
+  presetOverrides?: Partial<Record<AgentType, PresetOverride>>;
 }
 
 export interface AnalysisProgress {
