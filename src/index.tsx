@@ -4106,25 +4106,54 @@ app.get('/analysis', (c) => {
         
         // ========== 趋势解读面板相关函数 ==========
         
-        // 更新趋势解读面板
+        // 更新趋势解读面板（整合方案A+B+C）
         function updateTrendInterpretationPanel(chartType) {
-            if (!currentTrendInterpretations) {
-                showInterpretationLoading();
-                return;
-            }
-            
-            const interpretation = currentTrendInterpretations[chartType];
-            if (!interpretation) {
-                showInterpretationEmpty();
-                return;
-            }
-            
             const config = chartConfigMap[chartType];
+            if (!config) return;
             
             // 更新标题
             document.getElementById('interpretationTitle').textContent = config.label + '趋势解读';
             
-            // 更新数据概览
+            // 1. 获取 AI 返回的数据
+            let interpretation = currentTrendInterpretations?.[chartType] || {};
+            
+            // 2. 方案C: 从图表数据计算补充缺失字段
+            const calculated = calculateMetricsFromChartData(chartType);
+            
+            // 3. 合并数据：计算值作为基础，AI 返回值优先
+            if (calculated) {
+                // 对于缺失或无效的字段，使用计算值补充
+                if (!interpretation.latestValue || interpretation.latestValue === '--') {
+                    interpretation.latestValue = calculated.latestValue;
+                }
+                if (!interpretation.latestPeriod || interpretation.latestPeriod === '--') {
+                    interpretation.latestPeriod = calculated.latestPeriod;
+                }
+                if (!interpretation.yoyChange || interpretation.yoyChange === '--') {
+                    interpretation.yoyChange = calculated.yoyChange;
+                    interpretation.yoyDirection = calculated.yoyDirection;
+                }
+                if (!interpretation.trend) {
+                    interpretation.trend = calculated.trend;
+                }
+                if (!interpretation.trendLabel || interpretation.trendLabel === '--') {
+                    interpretation.trendLabel = calculated.trendLabel;
+                }
+                if (!interpretation.trendPeriods) {
+                    interpretation.trendPeriods = calculated.trendPeriods;
+                }
+                if (!interpretation.peakInfo && calculated.peakInfo) {
+                    interpretation.peakInfo = calculated.peakInfo;
+                }
+            }
+            
+            // 如果完全没有数据，显示空状态
+            if (!interpretation.latestValue && !interpretation.insight && !calculated) {
+                showInterpretationEmpty();
+                return;
+            }
+            
+            // 4. 更新数据概览
             document.getElementById('interpretationLatestValue').textContent = interpretation.latestValue || '--';
             
             const yoyEl = document.getElementById('interpretationYoyChange');
@@ -4139,9 +4168,9 @@ app.get('/analysis', (c) => {
                 yoyEl.className = 'text-xl font-bold text-gray-400';
             }
             
-            // 更新趋势判断
+            // 5. 更新趋势判断
             const trendBadge = document.getElementById('interpretationTrendBadge');
-            const trendLabel = interpretation.trendLabel || '持平';
+            const trendLabel = interpretation.trendLabel || '波动';
             trendBadge.textContent = trendLabel;
             // 根据趋势设置标签样式
             if (interpretation.trend === 'up') {
@@ -4152,31 +4181,28 @@ app.get('/analysis', (c) => {
                 trendBadge.className = 'px-2 py-0.5 rounded text-xs font-semibold bg-gray-500/20 text-gray-400';
             }
             
-            // 趋势描述
+            // 6. 趋势描述
             const trendDesc = [interpretation.trendPeriods, interpretation.peakInfo].filter(Boolean).join('。');
-            document.getElementById('interpretationTrendDesc').textContent = trendDesc || '--';
+            document.getElementById('interpretationTrendDesc').textContent = trendDesc || (calculated ? calculated.trendPeriods : '--');
             
-            // 深度洞察
-            document.getElementById('interpretationInsight').textContent = interpretation.insight || '暂无深度洞察';
+            // 7. 深度洞察
+            const insightText = interpretation.insight || '暂无深度洞察，请查看图表数据了解趋势变化。';
+            document.getElementById('interpretationInsight').textContent = insightText;
             
-            // 关注点 - 确保永远有有意义的内容
+            // 8. 方案B: 关注点 - 确保与 insight 不重复
             let concernsText = interpretation.concerns;
-            if (!concernsText || concernsText === '暂无特别关注点' || concernsText === '详见完整分析报告') {
-                // 从 insight 中提取关注点
-                const insightText = interpretation.insight || '';
-                const riskMatch = insightText.match(/(风险|注意|关注|挑战|压力|隐忧|警惕|需要关注|可能面临)[^。]*。/g);
-                if (riskMatch && riskMatch.length > 0) {
-                    concernsText = riskMatch.slice(0, 2).join(' ');
-                } else {
-                    // 提取最后一句作为总结
-                    const sentences = insightText.split(/[。！？]/).filter(s => s.trim().length > 10);
-                    if (sentences.length >= 1) {
-                        concernsText = sentences.slice(-1)[0] + '。';
-                    } else {
-                        concernsText = '建议持续跟踪该指标变化，结合行业趋势综合判断。';
-                    }
-                }
+            
+            // 检查是否需要生成 fallback
+            const needsFallback = !concernsText 
+                || concernsText === '暂无特别关注点' 
+                || concernsText === '详见完整分析报告'
+                || concernsText === insightText  // 与 insight 完全相同
+                || (insightText && concernsText && insightText.includes(concernsText.substring(0, 30)));  // insight 包含 concerns
+            
+            if (needsFallback) {
+                concernsText = generateConcernsFallback(insightText, chartType, calculated);
             }
+            
             document.getElementById('interpretationConcerns').textContent = concernsText;
         }
         
@@ -4200,6 +4226,173 @@ app.get('/analysis', (c) => {
             document.getElementById('interpretationTrendDesc').textContent = '暂无趋势数据';
             document.getElementById('interpretationInsight').textContent = '暂无深度洞察';
             document.getElementById('interpretationConcerns').textContent = '当前暂无该指标的解读数据，请尝试分析其他企业。';
+        }
+        
+        // ========== 方案C: 从图表数据计算指标 ==========
+        
+        // 从图表数据计算同比和趋势（当 AI 返回数据缺失时使用）
+        function calculateMetricsFromChartData(chartType) {
+            if (!currentChartData) return null;
+            
+            const config = chartConfigMap[chartType];
+            if (!config) return null;
+            
+            const income = currentChartData.income || [];
+            const fina = currentChartData.finaIndicator || [];
+            
+            // 合并数据并按日期排序
+            const dataMap = new Map();
+            income.forEach(item => {
+                if (item.end_date) {
+                    dataMap.set(item.end_date, { ...dataMap.get(item.end_date), ...item });
+                }
+            });
+            fina.forEach(item => {
+                if (item.end_date) {
+                    dataMap.set(item.end_date, { ...dataMap.get(item.end_date), ...item });
+                }
+            });
+            
+            const sorted = Array.from(dataMap.entries())
+                .sort((a, b) => a[0].localeCompare(b[0]))
+                .slice(-12);  // 取最近12期
+            
+            if (sorted.length < 2) return null;
+            
+            const latest = sorted[sorted.length - 1];
+            const latestPeriod = latest[0];
+            const latestData = latest[1];
+            const latestValue = latestData[config.field];
+            
+            if (latestValue === undefined || latestValue === null) return null;
+            
+            // 格式化最新值
+            let formattedLatestValue;
+            if (config.isPercentage) {
+                formattedLatestValue = latestValue?.toFixed(2) + '%';
+            } else if (config.divisor > 1) {
+                formattedLatestValue = (latestValue / config.divisor).toFixed(2) + config.unit;
+            } else {
+                formattedLatestValue = latestValue?.toFixed(2) + config.unit;
+            }
+            
+            // 计算同比：找去年同期
+            const yoyPeriod = (parseInt(latestPeriod) - 10000).toString();
+            const yoyEntry = sorted.find(([period]) => period === yoyPeriod);
+            
+            let yoyChange = '--';
+            let yoyDirection = 'flat';
+            if (yoyEntry) {
+                const yoyValue = yoyEntry[1][config.field];
+                if (yoyValue !== undefined && yoyValue !== null && yoyValue !== 0) {
+                    const change = ((latestValue - yoyValue) / Math.abs(yoyValue)) * 100;
+                    yoyChange = (change >= 0 ? '+' : '') + change.toFixed(2) + '%';
+                    yoyDirection = change > 1 ? 'up' : (change < -1 ? 'down' : 'flat');
+                }
+            }
+            
+            // 计算趋势：分析近4期
+            const recent4 = sorted.slice(-4);
+            let upCount = 0, downCount = 0;
+            for (let i = 1; i < recent4.length; i++) {
+                const prevVal = recent4[i-1][1][config.field];
+                const currVal = recent4[i][1][config.field];
+                if (currVal !== undefined && prevVal !== undefined) {
+                    if (currVal > prevVal) upCount++;
+                    else if (currVal < prevVal) downCount++;
+                }
+            }
+            
+            let trend = 'flat', trendLabel = '波动';
+            if (upCount >= 2 && upCount > downCount) {
+                trend = 'up'; trendLabel = '上升';
+            } else if (downCount >= 2 && downCount > upCount) {
+                trend = 'down'; trendLabel = '下降';
+            } else if (upCount === downCount && upCount > 0) {
+                trend = 'flat'; trendLabel = '波动';
+            } else {
+                trend = 'flat'; trendLabel = '持平';
+            }
+            
+            // 找峰值
+            let peakValue = latestValue, peakPeriod = latestPeriod;
+            sorted.forEach(([period, data]) => {
+                const val = data[config.field];
+                if (val !== undefined && val > peakValue) {
+                    peakValue = val;
+                    peakPeriod = period;
+                }
+            });
+            
+            let peakInfo = '';
+            if (peakPeriod !== latestPeriod) {
+                const peakFormatted = config.isPercentage 
+                    ? peakValue?.toFixed(2) + '%'
+                    : (config.divisor > 1 ? (peakValue / config.divisor).toFixed(2) + config.unit : peakValue?.toFixed(2) + config.unit);
+                peakInfo = \`峰值出现在\${formatPeriod(peakPeriod)}，达\${peakFormatted}\`;
+            }
+            
+            return {
+                latestValue: formattedLatestValue,
+                latestPeriod: formatPeriod(latestPeriod),
+                yoyChange,
+                yoyDirection,
+                trend,
+                trendLabel,
+                trendPeriods: \`近\${sorted.length}期数据，最近4期\${trendLabel}趋势\`,
+                peakInfo,
+                _calculated: true  // 标记为计算值
+            };
+        }
+        
+        // ========== 方案B: 生成差异化的关注点 ==========
+        
+        // 各指标的通用关注点模板
+        const metricConcernsTemplates = {
+            netProfit: '需关注净利润增速变化及非经常性损益影响，警惕业绩波动风险。',
+            revenue: '建议跟踪营收增速与行业平均水平的对比，关注市场份额变化。',
+            eps: '关注每股收益的可持续性及股本变动影响，警惕摊薄风险。',
+            grossMargin: '需警惕原材料成本波动对毛利率的影响，关注产品结构变化。',
+            netMargin: '关注费用率变化对净利率的侵蚀风险，警惕盈利质量下降。',
+            roe: '建议分析ROE变化的杜邦分解驱动因素，关注资本效率。',
+            debtRatio: '需关注偿债能力指标及债务期限结构，警惕财务风险累积。',
+            operatingProfit: '关注主营业务盈利能力的稳定性，警惕非主营业务占比变化。'
+        };
+        
+        // 生成差异化的关注点（避免与 insight 重复）
+        function generateConcernsFallback(insight, metricKey, calculated) {
+            if (!insight) {
+                return metricConcernsTemplates[metricKey] || '建议持续跟踪该指标，结合行业趋势综合判断。';
+            }
+            
+            // 1. 优先提取风险相关句子
+            const riskKeywords = ['风险', '警惕', '关注', '注意', '压力', '挑战', '下滑', '承压', '下降', '回落', '收窄'];
+            const sentences = insight.split(/[。！？]/).filter(s => s.trim().length > 10);
+            
+            // 找到包含风险关键词的句子
+            const riskSentences = sentences.filter(s => 
+                riskKeywords.some(k => s.includes(k))
+            );
+            
+            if (riskSentences.length > 0) {
+                // 取第一个风险句，但不能与 insight 开头相同
+                const riskText = riskSentences[0] + '。';
+                if (!insight.startsWith(riskText.substring(0, 20))) {
+                    return riskText;
+                }
+            }
+            
+            // 2. 根据计算出的趋势生成关注点
+            if (calculated) {
+                if (calculated.trend === 'down') {
+                    return \`该指标近期呈下降趋势，同比\${calculated.yoyChange}，建议重点关注变化原因及后续走势。\`;
+                } else if (calculated.trend === 'up' && calculated.yoyDirection === 'down') {
+                    return \`虽然整体趋势向上，但同比出现\${calculated.yoyChange}的变化，需关注增速放缓风险。\`;
+                }
+            }
+            
+            // 3. 使用指标特定的通用关注点
+            return metricConcernsTemplates[metricKey] || '建议持续跟踪该指标变化，结合行业趋势和公司战略综合判断。';
         }
         
         // 初始化趋势解读数据
