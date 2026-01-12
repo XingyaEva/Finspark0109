@@ -11,7 +11,7 @@ import { createAgentPresetsService } from '../services/agentPresets';
 import { createOrchestrator } from '../agents/orchestrator';
 import { AGENT_PROMPTS } from '../agents/prompts';
 import { optionalAuthMiddleware, optionalAuth, requireFeature } from '../middleware/auth';
-import type { Bindings, StartAnalysisRequest, AnalysisProgress, AnalysisReport, AgentType, ModelPreference } from '../types';
+import type { Bindings, StartAnalysisRequest, AnalysisProgress, AnalysisReport, AgentType, ModelPreference, AgentPromptConfig } from '../types';
 
 const api = new Hono<{ Bindings: Bindings }>();
 
@@ -437,8 +437,9 @@ api.post('/analyze/start', optionalAuthMiddleware(), async (c) => {
     const vectorEngineApiKey = c.env.VECTORENGINE_API_KEY;
     const currentReportsService = reportsService;
 
-    // ============ Phase 1: 加载用户 Preset 配置 ============
+    // ============ Phase 1: 加载用户 Preset 配置（模型偏好 + 自定义 Prompt）============
     let effectiveModelConfig = body.agentModelConfig || {};
+    let effectivePromptConfig: AgentPromptConfig = {};
     
     // 如果有数据库和用户登录，加载用户的 Preset/Settings 配置
     if (db && userId) {
@@ -449,14 +450,27 @@ api.post('/analyze/start', optionalAuthMiddleware(), async (c) => {
           body.presetOverrides as Record<AgentType, { presetId?: number; modelPreference?: ModelPreference }>
         );
         
-        // 将 Preset 配置转换为 AgentModelConfig
+        // 将 Preset 配置转换为 AgentModelConfig 和 AgentPromptConfig
         for (const [agentType, config] of Object.entries(analysisConfigs)) {
+          // 提取模型偏好
           if (config.modelPreference && !effectiveModelConfig[agentType as keyof typeof effectiveModelConfig]) {
             (effectiveModelConfig as any)[agentType] = config.modelPreference;
           }
+          
+          // 【新增】提取用户自定义 Prompt
+          if (config.promptText && config.promptText.trim() !== '') {
+            (effectivePromptConfig as any)[agentType] = config.promptText;
+          }
         }
         
-        console.log(`[Preset] Loaded user presets for ${Object.keys(analysisConfigs).length} agents`);
+        // 统计加载情况
+        const loadedModels = Object.keys(effectiveModelConfig).length;
+        const loadedPrompts = Object.keys(effectivePromptConfig).length;
+        console.log(`[Preset] Loaded user presets: ${loadedModels} model configs, ${loadedPrompts} custom prompts`);
+        
+        if (loadedPrompts > 0) {
+          console.log(`[Preset] Agents with custom prompts: ${Object.keys(effectivePromptConfig).join(', ')}`);
+        }
       } catch (presetError) {
         console.error('[Preset] Failed to load user presets:', presetError);
         // 继续使用默认配置
@@ -465,11 +479,13 @@ api.post('/analyze/start', optionalAuthMiddleware(), async (c) => {
 
     // 创建编排器并开始分析 - 带进度回调
     // Phase 0/1: 支持 Agent 独立模型配置 + Preset 系统
+    // Phase 2: 支持用户自定义 Prompt 注入
     const orchestrator = createOrchestrator({
       vectorEngine,
       tushare,
       cache,  // 用于趋势解读缓存
       agentModelConfig: effectiveModelConfig,  // 合并后的 Agent 模型配置
+      agentPromptConfig: effectivePromptConfig,  // 【新增】用户自定义 Prompt 配置
       onProgress: async (progress) => {
         // 实时更新进度到 KV/D1
         if (currentReportsService) {

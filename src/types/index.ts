@@ -459,6 +459,24 @@ export interface PresetOverride {
   modelPreference?: ModelPreference;
 }
 
+// ============ Agent Prompt 配置类型 ============
+/**
+ * AgentPromptConfig - 用户自定义 Prompt 配置
+ * 用于将用户的 Preset Prompt 注入到各 Agent 的 System Prompt 中
+ * 
+ * 使用方式：
+ * - API 层从 AgentPresetsService 提取用户配置的 presetPromptText
+ * - Orchestrator 通过 mergeSystemPrompt 将其追加到原始 System Prompt 末尾
+ * - 最大长度限制：2000 字符
+ * 
+ * @example
+ * const promptConfig: AgentPromptConfig = {
+ *   PROFITABILITY: "请特别关注毛利率的行业对比分析",
+ *   RISK: "风险分析时请重点关注债务结构"
+ * };
+ */
+export type AgentPromptConfig = Partial<Record<AgentType, string | null>>;
+
 // ============ API 请求/响应类型 ============
 export interface StartAnalysisRequest {
   companyCode: string;

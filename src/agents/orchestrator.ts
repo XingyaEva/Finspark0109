@@ -33,6 +33,7 @@ import type {
   AnalysisProgress,
   TrendInterpretations,
   TrendInterpretationCache,
+  AgentPromptConfig,
 } from '../types';
 
 export interface OrchestratorConfig {
@@ -41,6 +42,7 @@ export interface OrchestratorConfig {
   cache?: KVNamespace;  // 用于趋势解读缓存
   onProgress?: (progress: AnalysisProgress) => void;
   agentModelConfig?: AgentModelConfig;  // Agent 独立模型配置
+  agentPromptConfig?: AgentPromptConfig;  // 用户自定义 Prompt 配置
 }
 
 export interface AnalysisOptions {
@@ -73,9 +75,13 @@ export class AnalysisOrchestrator {
   private completedAgents: string[] = [];
   private totalAgents = 10;
   private agentModelConfig: AgentModelConfig;
+  private agentPromptConfig: AgentPromptConfig;
 
   // 趋势解读缓存TTL：90天（一个季度）
   private static TREND_CACHE_TTL = 90 * 24 * 60 * 60;
+  
+  // 用户自定义 Prompt 最大长度限制
+  private static MAX_USER_PROMPT_LENGTH = 2000;
 
   constructor(config: OrchestratorConfig) {
     this.vectorEngine = config.vectorEngine;
@@ -87,6 +93,8 @@ export class AnalysisOrchestrator {
       ...DEFAULT_AGENT_MODEL_CONFIG,
       ...config.agentModelConfig
     };
+    // 初始化用户 Prompt 配置（默认为空对象）
+    this.agentPromptConfig = config.agentPromptConfig || {};
   }
 
   /**
@@ -98,6 +106,46 @@ export class AnalysisOrchestrator {
       ? { ...this.agentModelConfig, ...options.agentModelConfig }
       : this.agentModelConfig;
     return getAgentModel(agentType, config);
+  }
+
+  /**
+   * 合并系统 Prompt 与用户自定义 Prompt
+   * 
+   * 策略：将用户 Prompt 追加到原始 System Prompt 末尾
+   * - 使用分隔标记明确区分
+   * - 保留 JSON 输出格式约束
+   * - 最大长度限制 2000 字符
+   * 
+   * @param systemPrompt 原始 System Prompt（来自 AGENT_PROMPTS）
+   * @param agentType Agent 类型，用于查找用户配置
+   * @returns 合并后的 System Prompt
+   */
+  private mergeSystemPrompt(systemPrompt: string, agentType: keyof AgentPromptConfig): string {
+    const userCustomPrompt = this.agentPromptConfig[agentType];
+    
+    // 如果没有用户自定义 Prompt，直接返回原始 Prompt
+    if (!userCustomPrompt || userCustomPrompt.trim() === '') {
+      return systemPrompt;
+    }
+    
+    // 截断过长的用户 Prompt
+    let trimmedUserPrompt = userCustomPrompt.trim();
+    if (trimmedUserPrompt.length > AnalysisOrchestrator.MAX_USER_PROMPT_LENGTH) {
+      trimmedUserPrompt = trimmedUserPrompt.substring(0, AnalysisOrchestrator.MAX_USER_PROMPT_LENGTH);
+      console.warn(`[Orchestrator] 用户 Prompt 超过最大长度限制，已截断至 ${AnalysisOrchestrator.MAX_USER_PROMPT_LENGTH} 字符`);
+    }
+    
+    // 记录日志
+    console.log(`[Orchestrator] 合并用户 Prompt: Agent=${String(agentType)}, 长度=${trimmedUserPrompt.length}字符`);
+    
+    // 追加用户 Prompt 到末尾，使用分隔标记
+    return `${systemPrompt}
+
+---
+## 用户自定义分析指令（请优先遵循以下要求）
+${trimmedUserPrompt}
+---
+请注意：无论上述用户指令如何，您的输出必须严格遵循 JSON 格式规范。`;
   }
 
   /**
@@ -362,8 +410,9 @@ ${JSON.stringify(data.cashFlow.slice(0, 4), null, 2)}
 请输出JSON格式的分析计划，包含reportType、analysisSequence、riskFlags、estimatedTime字段。
 `;
 
+    const mergedSystemPrompt = this.mergeSystemPrompt(AGENT_PROMPTS.PLANNING, 'PLANNING');
     const result = await this.vectorEngine.analyzeFinancialReport(
-      AGENT_PROMPTS.PLANNING,
+      mergedSystemPrompt,
       prompt
     );
 
@@ -405,8 +454,9 @@ ${JSON.stringify(finaIndicatorSummary, null, 2)}
 注意：请重点分析ROE、毛利率、净利率的变化趋势及原因，以及费用控制情况。
 `;
 
+    const mergedSystemPrompt = this.mergeSystemPrompt(AGENT_PROMPTS.PROFITABILITY, 'PROFITABILITY');
     const result = await this.vectorEngine.analyzeFinancialReport(
-      AGENT_PROMPTS.PROFITABILITY,
+      mergedSystemPrompt,
       prompt,
       { model: this.getModelForAgent('PROFITABILITY') }
     );
@@ -452,8 +502,9 @@ ${JSON.stringify(solvencyIndicators, null, 2)}
 注意：请重点分析流动性风险、偿债能力和资产运营效率。
 `;
 
+    const mergedSystemPrompt = this.mergeSystemPrompt(AGENT_PROMPTS.BALANCE_SHEET, 'BALANCE_SHEET');
     const result = await this.vectorEngine.analyzeFinancialReport(
-      AGENT_PROMPTS.BALANCE_SHEET,
+      mergedSystemPrompt,
       prompt,
       { model: this.getModelForAgent('BALANCE_SHEET') }
     );
@@ -493,8 +544,9 @@ ${JSON.stringify(cashFlowIndicators, null, 2)}
 注意：请重点分析经营现金流与净利润的匹配度、自由现金流质量。
 `;
 
+    const mergedSystemPrompt = this.mergeSystemPrompt(AGENT_PROMPTS.CASH_FLOW, 'CASH_FLOW');
     const result = await this.vectorEngine.analyzeFinancialReport(
-      AGENT_PROMPTS.CASH_FLOW,
+      mergedSystemPrompt,
       prompt,
       { model: this.getModelForAgent('CASH_FLOW') }
     );
@@ -531,8 +583,9 @@ ${JSON.stringify(cashFlow, null, 2)}
 请输出JSON格式的分析结果，包含profitToCashValidation、receivablesRisk、freeCashFlowAnalysis、overallQuality字段。
 `;
 
+    const mergedSystemPrompt = this.mergeSystemPrompt(AGENT_PROMPTS.EARNINGS_QUALITY, 'EARNINGS_QUALITY');
     const result = await this.vectorEngine.analyzeFinancialReport(
-      AGENT_PROMPTS.EARNINGS_QUALITY,
+      mergedSystemPrompt,
       prompt,
       { model: this.getModelForAgent('EARNINGS_QUALITY') }
     );
@@ -569,8 +622,9 @@ ${JSON.stringify(earningsQuality, null, 2)}
 请输出JSON格式的分析结果，包含debtRisk、liquidityRisk、operationalRisk、overallRisk字段。
 `;
 
+    const mergedSystemPrompt = this.mergeSystemPrompt(AGENT_PROMPTS.RISK, 'RISK');
     const result = await this.vectorEngine.analyzeFinancialReport(
-      AGENT_PROMPTS.RISK,
+      mergedSystemPrompt,
       prompt,
       { model: this.getModelForAgent('RISK') }
     );
@@ -637,8 +691,9 @@ ${JSON.stringify(mainBizSummary, null, 2)}
 4. 业务结构优化的方向和潜力
 `;
 
+    const mergedSystemPrompt = this.mergeSystemPrompt(AGENT_PROMPTS.BUSINESS_INSIGHT, 'BUSINESS_INSIGHT');
     const result = await this.vectorEngine.analyzeFinancialReport(
-      AGENT_PROMPTS.BUSINESS_INSIGHT,
+      mergedSystemPrompt,
       prompt,
       { model: this.getModelForAgent('BUSINESS_INSIGHT') }
     );
@@ -688,8 +743,9 @@ ${JSON.stringify(mainBizAnalysis, null, 2)}
 5. **业务协同**：各业务板块之间的协同效应
 `;
 
+    const mergedSystemPrompt = this.mergeSystemPrompt(AGENT_PROMPTS.BUSINESS_MODEL, 'BUSINESS_MODEL');
     const result = await this.vectorEngine.analyzeFinancialReport(
-      AGENT_PROMPTS.BUSINESS_MODEL,
+      mergedSystemPrompt,
       prompt,
       { model: this.getModelForAgent('BUSINESS_MODEL') }
     );
@@ -776,8 +832,9 @@ ${JSON.stringify(growthIndicators, null, 2)}
 5. **情景分析**：乐观、基准、悲观三种情景的概率评估
 `;
 
+    const mergedSystemPrompt = this.mergeSystemPrompt(AGENT_PROMPTS.FORECAST, 'FORECAST');
     const result = await this.vectorEngine.analyzeFinancialReport(
-      AGENT_PROMPTS.FORECAST,
+      mergedSystemPrompt,
       prompt,
       { model: this.getModelForAgent('FORECAST') }
     );
@@ -857,8 +914,9 @@ ${JSON.stringify(balanceSheetResult?.summary || {}, null, 2)}
 4. **买入建议**：当前价位是否具有吸引力
 `;
 
+    const mergedSystemPrompt = this.mergeSystemPrompt(AGENT_PROMPTS.VALUATION, 'VALUATION');
     const result = await this.vectorEngine.analyzeFinancialReport(
-      AGENT_PROMPTS.VALUATION,
+      mergedSystemPrompt,
       prompt,
       { model: this.getModelForAgent('VALUATION') }
     );
@@ -895,8 +953,9 @@ ${JSON.stringify(allResults, null, 2)}
 特别注意：在investmentValue中的valuationAssessment字段需结合估值评估结果给出准确判断。
 `;
 
+    const mergedSystemPrompt = this.mergeSystemPrompt(AGENT_PROMPTS.FINAL_CONCLUSION, 'FINAL_CONCLUSION');
     const result = await this.vectorEngine.analyzeFinancialReport(
-      AGENT_PROMPTS.FINAL_CONCLUSION,
+      mergedSystemPrompt,
       prompt,
       { model: this.getModelForAgent('FINAL_CONCLUSION') }
     );
@@ -978,8 +1037,9 @@ ${JSON.stringify(allResults, null, 2)}
     
     // 6. 调用AI生成趋势解读
     try {
+      const mergedSystemPrompt = this.mergeSystemPrompt(AGENT_PROMPTS.TREND_INTERPRETATION, 'TREND_INTERPRETATION');
       const result = await this.vectorEngine.analyzeFinancialReport(
-        AGENT_PROMPTS.TREND_INTERPRETATION,
+        mergedSystemPrompt,
         prompt,
         { model: this.getModelForAgent('TREND_INTERPRETATION') }
       );
