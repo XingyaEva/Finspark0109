@@ -2613,6 +2613,35 @@ app.get('/analysis', (c) => {
         // Agent名称映射
         const agentNames = ['PLANNING', 'PROFITABILITY', 'BALANCE_SHEET', 'CASH_FLOW', 'EARNINGS_QUALITY', 'RISK', 'BUSINESS_INSIGHT', 'BUSINESS_MODEL', 'FORECAST', 'FINAL_CONCLUSION'];
         
+        // ============ 权限管理（分析页） ============
+        let currentPermissions = null;
+        
+        function setPermissions(perms) {
+            currentPermissions = perms;
+            localStorage.setItem('permissions', JSON.stringify(perms));
+        }
+        
+        function getPermissions() {
+            if (currentPermissions) return currentPermissions;
+            const stored = localStorage.getItem('permissions');
+            return stored ? JSON.parse(stored) : null;
+        }
+        
+        // 显示升级提示
+        function showUpgradePrompt(message, needLogin = false) {
+            if (needLogin) {
+                const goLogin = confirm(message + '\\n\\n点击"确定"前往登录');
+                if (goLogin) {
+                    window.location.href = '/?showLogin=true';
+                }
+            } else {
+                const goUpgrade = confirm(message + '\\n\\n点击"确定"前往会员中心');
+                if (goUpgrade) {
+                    window.location.href = '/membership';
+                }
+            }
+        }
+        
         // 获取认证令牌
         function getAuthToken() {
             return localStorage.getItem('accessToken');
@@ -2622,6 +2651,44 @@ app.get('/analysis', (c) => {
         function getAuthHeaders() {
             const token = getAuthToken();
             return token ? { 'Authorization': \`Bearer \${token}\` } : {};
+        }
+        
+        // 初始化权限（从 API 获取最新权限）
+        async function initPermissions() {
+            const token = getAuthToken();
+            if (token) {
+                try {
+                    const response = await fetch('/api/auth/me', {
+                        headers: { 'Authorization': \`Bearer \${token}\` }
+                    });
+                    const data = await response.json();
+                    if (data.success && data.permissions) {
+                        setPermissions(data.permissions);
+                        console.log('[Auth] Permissions loaded:', data.permissions);
+                    }
+                } catch (error) {
+                    console.error('[Auth] Failed to load permissions:', error);
+                }
+            } else {
+                // 访客模式，尝试初始化访客会话
+                try {
+                    const guestId = localStorage.getItem('guestSessionId') || localStorage.getItem('guestFingerprint');
+                    if (guestId) {
+                        const response = await fetch('/api/user/guest/init', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ fingerprint: guestId })
+                        });
+                        const data = await response.json();
+                        if (data.success && data.permissions) {
+                            setPermissions(data.permissions);
+                            console.log('[Auth] Guest permissions loaded:', data.permissions);
+                        }
+                    }
+                } catch (error) {
+                    console.error('[Auth] Failed to init guest session:', error);
+                }
+            }
         }
         
         // 检查是否有已存在的分析报告（通过 reportId URL参数或检查最近报告）
@@ -2693,6 +2760,9 @@ app.get('/analysis', (c) => {
         
         // 页面加载时自动检查是否有已存在的报告
         (async function initPage() {
+            // 先初始化权限
+            await initPermissions();
+            
             const hasExisting = await checkExistingReport();
             if (!hasExisting) {
                 console.log('[Init] No existing report found, ready for new analysis');
