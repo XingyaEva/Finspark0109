@@ -1246,33 +1246,41 @@ ${analysisContext}
   }
 
   /**
-   * 解析JSON结果
+   * 解析JSON结果（使用增强的解析策略）
    */
   private parseJsonResult(result: string, agentName: string): Record<string, unknown> {
     try {
-      // 尝试直接解析
+      // 策略1: 直接解析
       return JSON.parse(result);
     } catch {
-      // 尝试提取JSON块
+      // 策略2: 提取markdown代码块
       const jsonMatch = result.match(/```json\n?([\s\S]*?)\n?```/);
       if (jsonMatch) {
         try {
           return JSON.parse(jsonMatch[1]);
         } catch {
-          console.error(`Failed to parse JSON from ${agentName}:`, result);
+          console.error(`[${agentName}] Failed to parse markdown JSON block`);
         }
       }
       
-      // 尝试查找JSON对象
-      const objMatch = result.match(/\{[\s\S]*\}/);
-      if (objMatch) {
-        try {
-          return JSON.parse(objMatch[0]);
-        } catch {
-          console.error(`Failed to parse JSON object from ${agentName}:`, result);
+      // 策略3: 查找JSON对象（选择最长的）
+      const objMatches = [...result.matchAll(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g)];
+      if (objMatches.length > 0) {
+        const sortedMatches = objMatches
+          .map(m => m[0])
+          .sort((a, b) => b.length - a.length);
+        
+        for (const match of sortedMatches) {
+          try {
+            return JSON.parse(match);
+          } catch {
+            // 继续尝试下一个
+          }
         }
+        console.error(`[${agentName}] Failed to parse any JSON object from ${objMatches.length} candidates`);
       }
 
+      console.error(`[${agentName}] All parsing strategies failed, returning rawResult`);
       return { rawResult: result };
     }
   }

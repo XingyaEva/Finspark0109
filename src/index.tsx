@@ -5035,8 +5035,33 @@ app.get('/analysis', (c) => {
             updateIndustryComparisonAgentStatus('loading', 90);
             
             try {
-                const response = await fetch(\`/api/analyze/industry-comparison/\${companyCode}\`);
+                const response = await fetch(\`/api/analyze/industry-comparison/\${companyCode}\`, {
+                    headers: getAuthHeaders()
+                });
                 const data = await response.json();
+                
+                // 处理权限不足 (403)
+                if (!data.success && data.needUpgrade) {
+                    // 显示升级提示（内嵌样式）
+                    aiAnalysisDiv.innerHTML = \`
+                        <div class="border-2 border-dashed border-orange-600/30 rounded-lg p-6 text-center bg-gradient-to-br from-orange-900/10 to-orange-800/5">
+                            <i class="fas fa-lock text-3xl text-orange-500 mb-3"></i>
+                            <h4 class="text-lg font-semibold text-orange-400 mb-2">AI深度行业分析</h4>
+                            <p class="text-gray-400 text-sm mb-4">\${data.upgradePrompt || '升级Pro会员解锁AI深度分析'}</p>
+                            <div class="flex gap-3 justify-center">
+                                <a href="/membership" class="btn-gold px-4 py-2 rounded-lg text-sm font-semibold inline-flex items-center gap-2">
+                                    <i class="fas fa-crown"></i>立即升级
+                                </a>
+                                <button onclick="showModal('loginModal')" class="btn-outline px-4 py-2 rounded-lg text-sm">
+                                    <i class="fas fa-sign-in-alt"></i>登录
+                                </button>
+                            </div>
+                        </div>
+                    \`;
+                    // 基础对比数据已加载，标记为完成（部分功能需升级）
+                    updateIndustryComparisonAgentStatus('completed');
+                    return;
+                }
                 
                 if (data.success && data.aiAnalysis) {
                     renderIndustryAIAnalysis(data.aiAnalysis);
@@ -5049,7 +5074,7 @@ app.get('/analysis', (c) => {
                 }
             } catch (error) {
                 console.error('[IndustryAIAnalysis] Error:', error);
-                aiAnalysisDiv.innerHTML = '<div class="text-center py-4 text-red-400">AI分析加载失败</div>';
+                aiAnalysisDiv.innerHTML = '<div class="text-center py-4 text-red-400">AI分析加载失败，请稍后重试</div>';
                 // 基础数据已加载，仅AI分析失败，仍标记为完成（部分完成）
                 updateIndustryComparisonAgentStatus('completed');
             }
