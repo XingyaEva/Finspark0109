@@ -217,7 +217,7 @@ app.get('/', (c) => {
         .pro-feature.locked:hover { opacity: 0.8; }
         ${floatingAssistantStyles}
         ${analysisConfigStyles}
-        ${stockMarketPanelStyles}
+        ` + stockMarketPanelStyles + `
         ${responsiveStyles}
     </style>
 </head>
@@ -1570,7 +1570,7 @@ app.get('/analysis', (c) => {
                 </div>
 
                 <!-- 🆕 股票走势面板（用户建议放在投资建议摘要前） -->
-                ${stockMarketPanelHtml}
+                ` + stockMarketPanelHtml + `
 
                 <!-- 投资建议摘要（整合关键要点） -->
                 <div id="summaryCard" class="card rounded-xl p-4 md:p-6 mb-4 md:mb-6">
@@ -8679,7 +8679,7 @@ app.get('/analysis', (c) => {
         });
         
         // 🆕 股票走势面板脚本（提前初始化，确保面板准备就绪）
-        ${stockMarketPanelScript}
+        ` + stockMarketPanelScript + `
         
         // 启动分析（面板初始化后才执行，确保可以安全调用loadData）
         startAnalysis();
