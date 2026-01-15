@@ -8,8 +8,8 @@
 ## 当前测试环境
 
 ### 访问地址
-- **测试环境URL**: https://3000-impnztmdl9pncm6s5qgi2-0e616f0a.sandbox.novita.ai
-- **健康检查**: https://3000-impnztmdl9pncm6s5qgi2-0e616f0a.sandbox.novita.ai/api/health
+- **测试环境URL**: https://3000-ibkkiwxzgdsok7jesa2f2-5634da27.sandbox.novita.ai
+- **健康检查**: https://3000-ibkkiwxzgdsok7jesa2f2-5634da27.sandbox.novita.ai/api/health
 
 ### 环境状态
 | 组件 | 状态 | 说明 |
@@ -22,13 +22,13 @@
 ### 测试命令
 ```bash
 # 检查服务健康状态
-curl https://3000-impnztmdl9pncm6s5qgi2-0e616f0a.sandbox.novita.ai/api/health
+curl https://3000-ibkkiwxzgdsok7jesa2f2-5634da27.sandbox.novita.ai/api/health
 
 # 获取热门股票
-curl https://3000-impnztmdl9pncm6s5qgi2-0e616f0a.sandbox.novita.ai/api/stock/hot
+curl https://3000-ibkkiwxzgdsok7jesa2f2-5634da27.sandbox.novita.ai/api/stock/hot
 
 # 检查数据库状态
-curl https://3000-impnztmdl9pncm6s5qgi2-0e616f0a.sandbox.novita.ai/api/db/status
+curl https://3000-ibkkiwxzgdsok7jesa2f2-5634da27.sandbox.novita.ai/api/db/status
 ```
 
 ## 系统架构
