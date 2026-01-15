@@ -40,15 +40,15 @@ export const stockMarketPanelStyles = `
   
   /* 面板标题区 */
   .smp-header {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     margin-bottom: 16px;
   }
   
   .smp-title {
-    display: flex !important;
-    align-items: center !important;
+    display: flex;
+    align-items: center;
     gap: 10px;
     font-size: 18px;
     font-weight: 600;
@@ -62,8 +62,8 @@ export const stockMarketPanelStyles = `
   .smp-data-source {
     font-size: 12px;
     color: #6b7280;
-    display: flex !important;
-    align-items: center !important;
+    display: flex;
+    align-items: center;
     gap: 6px;
   }
   
@@ -82,15 +82,15 @@ export const stockMarketPanelStyles = `
     padding: 16px 20px !important;
     margin-bottom: 20px !important;
     display: flex !important;
-    align-items: center !important !important;
-    justify-content: space-between !important !important;
+    align-items: center !important;
+    justify-content: space-between !important;
     flex-wrap: wrap !important;
     gap: 16px !important;
   }
   
   .quote-main {
-    display: flex !important;
-    align-items: baseline !important;
+    display: flex;
+    align-items: baseline;
     gap: 16px;
   }
   
@@ -105,8 +105,8 @@ export const stockMarketPanelStyles = `
   .quote-price.flat { color: #9ca3af; }
   
   .quote-change {
-    display: flex !important;
-    flex-direction: column !important;
+    display: flex;
+    flex-direction: column;
     gap: 2px;
   }
   
@@ -142,7 +142,7 @@ export const stockMarketPanelStyles = `
   
   /* 行情指标组 */
   .quote-metrics {
-    display: grid !important;
+    display: grid;
     grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
     gap: 16px;
   }
@@ -166,7 +166,7 @@ export const stockMarketPanelStyles = `
   
   /* Tab导航 */
   .smp-tabs {
-    display: flex !important;
+    display: flex;
     gap: 4px;
     background: rgba(0, 0, 0, 0.2);
     border-radius: 10px;
@@ -185,9 +185,9 @@ export const stockMarketPanelStyles = `
     border-radius: 8px;
     cursor: pointer;
     transition: all 0.2s ease;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     gap: 6px;
   }
   
@@ -212,12 +212,12 @@ export const stockMarketPanelStyles = `
   }
   
   .smp-tab-content.active {
-    display: block !important;
+    display: block;
   }
   
   /* Tab1: K线图区域 */
   .kline-section {
-    display: grid !important;
+    display: grid;
     grid-template-columns: 1fr 300px;
     gap: 20px;
   }
@@ -236,16 +236,16 @@ export const stockMarketPanelStyles = `
   }
   
   .kline-toolbar {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     margin-bottom: 12px;
     flex-wrap: wrap;
     gap: 12px;
   }
   
   .kline-period-btns {
-    display: flex !important;
+    display: flex;
     gap: 4px;
   }
   
@@ -272,13 +272,13 @@ export const stockMarketPanelStyles = `
   }
   
   .ma-toggles {
-    display: flex !important;
+    display: flex;
     gap: 8px;
   }
   
   .ma-toggle {
-    display: flex !important;
-    align-items: center !important;
+    display: flex;
+    align-items: center;
     gap: 4px;
     font-size: 12px;
     color: #9ca3af;
@@ -327,8 +327,8 @@ export const stockMarketPanelStyles = `
     font-weight: 600;
     color: #d4af37;
     margin-bottom: 12px;
-    display: flex !important;
-    align-items: center !important;
+    display: flex;
+    align-items: center;
     gap: 6px;
   }
   
@@ -348,8 +348,8 @@ export const stockMarketPanelStyles = `
   }
   
   .insight-sentiment {
-    display: inline-flex !important;
-    align-items: center !important;
+    display: inline-flex;
+    align-items: center;
     gap: 4px;
     font-size: 12px;
     padding: 3px 10px;
@@ -372,8 +372,8 @@ export const stockMarketPanelStyles = `
   }
   
   .insight-items {
-    display: flex !important;
-    flex-direction: column !important;
+    display: flex;
+    flex-direction: column;
     gap: 12px;
   }
   
@@ -409,7 +409,7 @@ export const stockMarketPanelStyles = `
   
   /* Tab2: 交易活跃 */
   .trading-section {
-    display: grid !important;
+    display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 20px;
   }
@@ -425,17 +425,17 @@ export const stockMarketPanelStyles = `
     font-weight: 600;
     color: #d4af37;
     margin-bottom: 16px;
-    display: flex !important;
-    align-items: center !important;
+    display: flex;
+    align-items: center;
     gap: 8px;
   }
   
   .trading-gauge {
     position: relative;
     height: 120px;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   
   .trading-gauge-value {
@@ -452,8 +452,8 @@ export const stockMarketPanelStyles = `
   }
   
   .trading-percentile {
-    display: flex !important;
-    align-items: center !important;
+    display: flex;
+    align-items: center;
     gap: 8px;
     margin-top: 12px;
   }
@@ -484,8 +484,8 @@ export const stockMarketPanelStyles = `
   }
   
   .activity-level {
-    display: inline-flex !important;
-    align-items: center !important;
+    display: inline-flex;
+    align-items: center;
     gap: 4px;
     padding: 4px 12px;
     border-radius: 20px;
@@ -511,7 +511,7 @@ export const stockMarketPanelStyles = `
   
   /* Tab3: 估值分析 */
   .valuation-section {
-    display: grid !important;
+    display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: 20px;
   }
@@ -523,9 +523,9 @@ export const stockMarketPanelStyles = `
   }
   
   .valuation-header {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     margin-bottom: 16px;
   }
   
@@ -533,8 +533,8 @@ export const stockMarketPanelStyles = `
     font-size: 14px;
     font-weight: 600;
     color: #d4af37;
-    display: flex !important;
-    align-items: center !important;
+    display: flex;
+    align-items: center;
     gap: 8px;
   }
   
@@ -568,8 +568,8 @@ export const stockMarketPanelStyles = `
   }
   
   .valuation-range {
-    display: flex !important;
-    align-items: center !important;
+    display: flex;
+    align-items: center;
     gap: 8px;
     font-size: 12px;
     color: #9ca3af;
@@ -599,8 +599,8 @@ export const stockMarketPanelStyles = `
   }
   
   .valuation-labels {
-    display: flex !important;
-    justify-content: space-between !important;
+    display: flex;
+    justify-content: space-between;
     margin-top: 8px;
     font-size: 11px;
     color: #6b7280;
@@ -608,7 +608,7 @@ export const stockMarketPanelStyles = `
   
   /* Tab4: 股本市值 */
   .shares-section {
-    display: grid !important;
+    display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 20px;
   }
@@ -624,8 +624,8 @@ export const stockMarketPanelStyles = `
     font-weight: 600;
     color: #d4af37;
     margin-bottom: 16px;
-    display: flex !important;
-    align-items: center !important;
+    display: flex;
+    align-items: center;
     gap: 8px;
   }
   
@@ -635,15 +635,15 @@ export const stockMarketPanelStyles = `
   }
   
   .shares-list {
-    display: flex !important;
-    flex-direction: column !important;
+    display: flex;
+    flex-direction: column;
     gap: 12px;
   }
   
   .shares-item {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     padding: 10px 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   }
@@ -655,8 +655,8 @@ export const stockMarketPanelStyles = `
   .shares-item-label {
     font-size: 13px;
     color: #9ca3af;
-    display: flex !important;
-    align-items: center !important;
+    display: flex;
+    align-items: center;
     gap: 8px;
   }
   
@@ -668,8 +668,8 @@ export const stockMarketPanelStyles = `
   }
   
   .market-cap-badge {
-    display: inline-flex !important;
-    align-items: center !important;
+    display: inline-flex;
+    align-items: center;
     gap: 6px;
     padding: 8px 16px;
     border-radius: 20px;
@@ -695,10 +695,10 @@ export const stockMarketPanelStyles = `
   
   /* 加载状态 */
   .smp-loading {
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     min-height: 300px;
     gap: 16px;
   }
@@ -723,10 +723,10 @@ export const stockMarketPanelStyles = `
   
   /* 错误状态 */
   .smp-error {
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     min-height: 200px;
     gap: 12px;
     color: #ef4444;
@@ -746,9 +746,9 @@ export const stockMarketPanelStyles = `
     font-size: 11px;
     color: #6b7280;
     margin-top: 16px;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: flex-end !important;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
     gap: 6px;
   }
 `;
@@ -1111,16 +1111,9 @@ export const stockMarketPanelScript = `
     // 加载股票数据
     loadData: async function(stockCode, days = 180) {
       const panel = document.getElementById('stockMarketPanel');
-      if (!panel) {
-        console.error('[StockMarketPanel] 面板元素未找到');
-        return;
-      }
+      if (!panel) return;
       
-      // 强制显示面板（使用多种方式确保显示）
       panel.style.display = 'block';
-      panel.style.visibility = 'visible';
-      panel.style.opacity = '1';
-      panel.classList.remove('hidden');
       
       // 显示加载状态
       this.showLoading();
@@ -1235,26 +1228,12 @@ export const stockMarketPanelScript = `
       const chartDom = document.getElementById('klineChart');
       if (!chartDom) return;
       
-      // 检查ECharts是否加载
-      if (typeof echarts === 'undefined') {
-        console.error('[StockMarketPanel] ECharts未加载，等待重试...');
-        chartDom.innerHTML = '<div class="smp-error"><i class="fas fa-exclamation-circle smp-error-icon"></i><div class="smp-error-text">图表库加载中，请稍候...</div></div>';
-        
-        // 延迟重试
-        setTimeout(() => {
-          if (typeof echarts !== 'undefined') {
-            console.log('[StockMarketPanel] ECharts加载完成，重新渲染');
-            this.renderKlineChart();
-          } else {
-            console.error('[StockMarketPanel] ECharts加载超时');
-            chartDom.innerHTML = '<div class="smp-error"><i class="fas fa-exclamation-circle smp-error-icon"></i><div class="smp-error-text">图表加载失败，请刷新页面</div></div>';
-          }
-        }, 2000);
-        return;
-      }
-      
       // 初始化或获取实例
       if (!this.chartInstance) {
+        if (typeof echarts === 'undefined') {
+          console.warn('[StockMarketPanel] ECharts 未加载');
+          return;
+        }
         this.chartInstance = echarts.init(chartDom);
       }
       
@@ -1266,10 +1245,7 @@ export const stockMarketPanelScript = `
       if (!this.chartInstance || !this.currentData) return;
       
       const kline = this.currentData.kline || [];
-      const maData = this.currentInsight?.maData || {};
-      
-      // 根据周期筛选数据
-      const filteredKline = kline.slice(-this.currentPeriod);
+      const mcurrentPeriod);
       
       const dates = filteredKline.map(k => this.formatDate(k.date));
       const ohlc = filteredKline.map(k => [k.open, k.close, k.low, k.high]);

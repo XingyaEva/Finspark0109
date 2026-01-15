@@ -8678,11 +8678,11 @@ app.get('/analysis', (c) => {
             document.getElementById('comicSection').scrollIntoView({ behavior: 'smooth' });
         });
         
-        // 启动分析
-        startAnalysis();
-        
-        // 🆕 股票走势面板脚本
+        // 🆕 股票走势面板脚本（提前初始化，确保面板准备就绪）
         ${stockMarketPanelScript}
+        
+        // 启动分析（面板初始化后才执行，确保可以安全调用loadData）
+        startAnalysis();
     </script>
     
     <!-- 悬浮智能问数助手 -->
