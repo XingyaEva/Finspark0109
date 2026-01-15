@@ -8681,6 +8681,12 @@ app.get('/analysis', (c) => {
         // 🆕 股票走势面板脚本（提前初始化，确保面板准备就绪）
         ` + stockMarketPanelScript + `
         
+        // 🆕 立即加载股票走势面板数据（不等待分析完成）
+        if (code && window.StockMarketPanel) {
+            console.log('[Main] 页面加载完成，立即加载股票面板数据:', code);
+            window.StockMarketPanel.loadData(code, 90); // 默认加载3个月数据
+        }
+        
         // 启动分析（面板初始化后才执行，确保可以安全调用loadData）
         startAnalysis();
     </script>
