@@ -29,6 +29,9 @@ const CACHE_TTL = {
   EXPRESS: 12 * 3600,              // 业绩快报: 12小时
   FINA_INDICATOR: 24 * 3600,       // 财务指标: 24小时
   MAIN_BIZ: 24 * 3600,             // 主营业务构成: 24小时
+  // 股票走势面板专用缓存TTL
+  KLINE: 5 * 60,                   // K线数据: 5分钟（交易时间内频繁更新）
+  DAILY_BASIC_HISTORY: 24 * 3600,  // 历史每日指标: 24小时
 } as const;
 
 // 缓存Key生成器
@@ -46,6 +49,9 @@ const CacheKeys = {
   express: (tsCode: string) => `tushare:express:${tsCode}`,
   finaIndicator: (tsCode: string, period: string) => `tushare:fina_indicator:${tsCode}:${period}`,
   mainBiz: (tsCode: string, period: string) => `tushare:mainbiz:${tsCode}:${period}`,
+  // 股票走势面板专用缓存键
+  kline: (tsCode: string, days: number) => `tushare:kline:${tsCode}:${days}`,
+  dailyBasicHistory: (tsCode: string, days: number) => `tushare:daily_basic_history:${tsCode}:${days}`,
 };
 
 // 令牌桶速率限制器
@@ -564,6 +570,171 @@ export class TushareService {
       return [];
     }
   }
+
+  // ========== 股票走势面板专用接口 ==========
+
+  /**
+   * 获取股票K线数据（用于走势面板）
+   * @param tsCode 股票代码
+   * @param days 获取最近N天的数据，默认180天（6个月）
+   * @returns K线数据数组，按日期升序排列
+   */
+  async getStockKline(tsCode: string, days: number = 180): Promise<DailyData[]> {
+    const cacheKey = CacheKeys.kline(tsCode, days);
+    
+    // 计算日期范围
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    
+    const formatDate = (d: Date) => d.toISOString().split('T')[0].replace(/-/g, '');
+    
+    try {
+      const data = await this.callApiWithCache(
+        cacheKey,
+        CACHE_TTL.KLINE,
+        () => this.callApi<DailyData>('daily', {
+          ts_code: tsCode,
+          start_date: formatDate(startDate),
+          end_date: formatDate(endDate),
+        }, [
+          'ts_code', 'trade_date', 'open', 'high', 'low', 'close',
+          'pre_close', 'change', 'pct_chg', 'vol', 'amount'
+        ])
+      );
+      
+      // Tushare返回的数据是按日期降序，需要反转为升序
+      return data.reverse();
+    } catch (error) {
+      console.warn(`[Tushare] K线数据API调用失败: ${error}`);
+      return [];
+    }
+  }
+
+  /**
+   * 获取历史每日指标数据（用于走势面板的估值/交易Tab）
+   * @param tsCode 股票代码
+   * @param days 获取最近N天的数据，默认180天
+   * @returns 每日指标数据数组，按日期升序排列
+   */
+  async getHistoricalDailyBasic(tsCode: string, days: number = 180): Promise<DailyBasicData[]> {
+    const cacheKey = CacheKeys.dailyBasicHistory(tsCode, days);
+    
+    // 计算日期范围
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    
+    const formatDate = (d: Date) => d.toISOString().split('T')[0].replace(/-/g, '');
+    
+    try {
+      const data = await this.callApiWithCache(
+        cacheKey,
+        CACHE_TTL.DAILY_BASIC_HISTORY,
+        () => this.callApi<DailyBasicData>('daily_basic', {
+          ts_code: tsCode,
+          start_date: formatDate(startDate),
+          end_date: formatDate(endDate),
+        }, [
+          'ts_code', 'trade_date', 'close', 'turnover_rate', 'volume_ratio',
+          'pe', 'pe_ttm', 'pb', 'ps', 'ps_ttm', 'dv_ratio', 'dv_ttm',
+          'total_share', 'float_share', 'free_share', 'total_mv', 'circ_mv'
+        ])
+      );
+      
+      // Tushare返回的数据是按日期降序，需要反转为升序
+      return data.reverse();
+    } catch (error) {
+      console.warn(`[Tushare] 历史每日指标API调用失败: ${error}`);
+      return [];
+    }
+  }
+
+  /**
+   * 获取股票完整市场数据包（用于走势面板一次性加载）
+   * 整合K线、每日指标、基本信息，减少多次API调用
+   * @param tsCode 股票代码
+   * @param days K线天数，默认180天
+   */
+  async getMarketDataPackage(tsCode: string, days: number = 180): Promise<MarketDataPackage> {
+    // 并行请求所有数据
+    const [basic, company, kline, dailyBasic] = await Promise.all([
+      this.getStockBasic(tsCode),
+      this.getCompanyInfo(tsCode),
+      this.getStockKline(tsCode, days),
+      this.getHistoricalDailyBasic(tsCode, days),
+    ]);
+    
+    // 获取最新一天的数据
+    const latestKline = kline.length > 0 ? kline[kline.length - 1] : null;
+    const latestDailyBasic = dailyBasic.length > 0 ? dailyBasic[dailyBasic.length - 1] : null;
+    
+    return {
+      basic: basic ? {
+        code: basic.ts_code,
+        name: basic.name,
+        industry: basic.industry,
+        market: basic.market,
+        listDate: basic.list_date,
+      } : null,
+      company: company ? {
+        chairman: company.chairman,
+        employees: company.employees,
+        mainBusiness: company.main_business,
+      } : null,
+      quote: latestKline ? {
+        tradeDate: latestKline.trade_date,
+        open: latestKline.open,
+        high: latestKline.high,
+        low: latestKline.low,
+        close: latestKline.close,
+        preClose: latestKline.pre_close,
+        change: latestKline.change,
+        pctChg: latestKline.pct_chg,
+        volume: latestKline.vol,
+        amount: latestKline.amount,
+        turnoverRate: latestDailyBasic?.turnover_rate ?? null,
+        volumeRatio: latestDailyBasic?.volume_ratio ?? null,
+      } : null,
+      valuation: latestDailyBasic ? {
+        pe: latestDailyBasic.pe,
+        peTtm: latestDailyBasic.pe_ttm,
+        pb: latestDailyBasic.pb,
+        ps: latestDailyBasic.ps,
+        psTtm: latestDailyBasic.ps_ttm,
+        dvRatio: latestDailyBasic.dv_ratio,
+        dvTtm: latestDailyBasic.dv_ttm,
+      } : null,
+      shares: latestDailyBasic ? {
+        totalShare: latestDailyBasic.total_share,
+        floatShare: latestDailyBasic.float_share,
+        freeShare: latestDailyBasic.free_share,
+        totalMv: latestDailyBasic.total_mv,
+        circMv: latestDailyBasic.circ_mv,
+      } : null,
+      kline: kline.map(k => ({
+        date: k.trade_date,
+        open: k.open,
+        high: k.high,
+        low: k.low,
+        close: k.close,
+        volume: k.vol,
+        amount: k.amount,
+        pctChg: k.pct_chg,
+      })),
+      dailyBasicHistory: dailyBasic.map(d => ({
+        date: d.trade_date,
+        turnoverRate: d.turnover_rate,
+        volumeRatio: d.volume_ratio,
+        pe: d.pe,
+        peTtm: d.pe_ttm,
+        pb: d.pb,
+        totalMv: d.total_mv,
+        circMv: d.circ_mv,
+      })),
+      updateTime: new Date().toISOString(),
+    };
+  }
 }
 
 // 数据类型定义
@@ -784,6 +955,77 @@ export interface MainBizData {
   bz_profit: number;      // 主营业务利润(元)
   bz_cost: number;        // 主营业务成本(元)
   curr_type: string;      // 货币代码
+}
+
+// ========== 股票走势面板数据包类型 ==========
+
+/**
+ * 市场数据包 - 用于走势面板一次性加载
+ */
+export interface MarketDataPackage {
+  basic: {
+    code: string;
+    name: string;
+    industry: string;
+    market: string;
+    listDate: string;
+  } | null;
+  company: {
+    chairman: string;
+    employees: number;
+    mainBusiness: string;
+  } | null;
+  quote: {
+    tradeDate: string;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    preClose: number;
+    change: number;
+    pctChg: number;
+    volume: number;
+    amount: number;
+    turnoverRate: number | null;
+    volumeRatio: number | null;
+  } | null;
+  valuation: {
+    pe: number;
+    peTtm: number;
+    pb: number;
+    ps: number;
+    psTtm: number;
+    dvRatio: number;
+    dvTtm: number;
+  } | null;
+  shares: {
+    totalShare: number;
+    floatShare: number;
+    freeShare: number;
+    totalMv: number;
+    circMv: number;
+  } | null;
+  kline: Array<{
+    date: string;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+    amount: number;
+    pctChg: number;
+  }>;
+  dailyBasicHistory: Array<{
+    date: string;
+    turnoverRate: number;
+    volumeRatio: number;
+    pe: number;
+    peTtm: number;
+    pb: number;
+    totalMv: number;
+    circMv: number;
+  }>;
+  updateTime: string;
 }
 
 // 创建服务实例的工厂函数

@@ -20,6 +20,7 @@ import { settingsPageHtml } from './pages/settings';
 import { agentSettingsPageHtml } from './pages/agentSettings';
 import { floatingAssistantStyles, floatingAssistantHtml, floatingAssistantScript } from './components/floatingAssistant';
 import { analysisConfigStyles, analysisConfigHtml, analysisConfigScript } from './components/analysisConfig';
+import { stockMarketPanelStyles, stockMarketPanelHtml, stockMarketPanelScript } from './components/stockMarketPanel';
 import { responsiveStyles } from './styles/responsive';
 import type { Bindings } from './types';
 
@@ -216,6 +217,7 @@ app.get('/', (c) => {
         .pro-feature.locked:hover { opacity: 0.8; }
         ${floatingAssistantStyles}
         ${analysisConfigStyles}
+        ${stockMarketPanelStyles}
         ${responsiveStyles}
     </style>
 </head>
@@ -1566,6 +1568,9 @@ app.get('/analysis', (c) => {
                         <i class="fas fa-images sm:mr-2"></i><span class="hidden sm:inline">查看漫画</span>
                     </button>
                 </div>
+
+                <!-- 🆕 股票走势面板（用户建议放在投资建议摘要前） -->
+                ${stockMarketPanelHtml}
 
                 <!-- 投资建议摘要（整合关键要点） -->
                 <div id="summaryCard" class="card rounded-xl p-4 md:p-6 mb-4 md:mb-6">
@@ -3259,6 +3264,13 @@ app.get('/analysis', (c) => {
         // 显示分析结果 - 支持深度分析的分层展示
         function displayResults(report) {
             document.getElementById('analysisResults').classList.remove('hidden');
+            
+            // 🆕 加载股票走势面板数据
+            // 优先使用报告中的股票代码，其次使用URL参数中的code
+            const stockCode = report.companyCode || code;
+            if (stockCode && window.StockMarketPanel) {
+                window.StockMarketPanel.loadData(stockCode, 90); // 默认3个月
+            }
             
             const conclusion = report.finalConclusion || {};
             // 兼容新旧数据格式 - 增强版，遍历所有可能的数据路径
@@ -8668,6 +8680,9 @@ app.get('/analysis', (c) => {
         
         // 启动分析
         startAnalysis();
+        
+        // 🆕 股票走势面板脚本
+        ${stockMarketPanelScript}
     </script>
     
     <!-- 悬浮智能问数助手 -->

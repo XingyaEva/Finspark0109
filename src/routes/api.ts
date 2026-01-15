@@ -249,6 +249,77 @@ api.get('/stock/daily/:code', async (c) => {
   }
 });
 
+// ============ 股票走势面板 - 完整市场数据包 ============
+// 用于前端股票走势面板一次性加载所有需要的数据
+// 支持参数:
+// - days: K线天数，默认180天（6个月）
+// - withInsight: 是否包含解读数据，默认true
+api.get('/stock/:code/market-data', async (c) => {
+  const code = c.req.param('code');
+  const daysParam = c.req.query('days');
+  const withInsightParam = c.req.query('withInsight');
+  const days = daysParam ? parseInt(daysParam) : 180; // 默认6个月
+  const withInsight = withInsightParam !== 'false'; // 默认包含解读
+
+  if (!code) {
+    return c.json({ success: false, error: '请提供股票代码' }, 400);
+  }
+
+  try {
+    const tushare = createTushareService({
+      token: c.env.TUSHARE_TOKEN,
+      cache: c.env.CACHE,
+    });
+
+    // 使用 getMarketDataPackage 一次性获取所有数据
+    const marketData = await tushare.getMarketDataPackage(code, days);
+
+    // 如果没有基本信息，说明股票不存在
+    if (!marketData.basic) {
+      return c.json({ success: false, error: '股票不存在或数据获取失败' }, 404);
+    }
+
+    // 如果需要解读数据
+    if (withInsight) {
+      try {
+        const { generateMarketInsightPackage } = await import('../services/insightGenerator');
+        const insightPackage = generateMarketInsightPackage(
+          marketData,
+          code,
+          marketData.basic.name
+        );
+        
+        return c.json({
+          success: true,
+          data: marketData,
+          insight: insightPackage,
+        });
+      } catch (insightError) {
+        console.warn('Generate insight error:', insightError);
+        // 解读生成失败不影响主数据返回
+        return c.json({
+          success: true,
+          data: marketData,
+          insight: null,
+          insightError: '解读数据生成失败',
+        });
+      }
+    }
+
+    return c.json({
+      success: true,
+      data: marketData,
+    });
+  } catch (error) {
+    console.error('Market data error:', error);
+    return c.json({ 
+      success: false, 
+      error: '获取市场数据失败',
+      details: error instanceof Error ? error.message : '未知错误'
+    }, 500);
+  }
+});
+
 // ============ 财务数据 ============
 api.get('/stock/financial/:code/:type', async (c) => {
   const code = c.req.param('code');
