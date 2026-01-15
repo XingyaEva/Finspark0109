@@ -274,8 +274,10 @@ export function calculateMarketFeatures(marketData: MarketDataPackage): MarketFe
   const preClose = quote.preClose || latest.close;
   const amplitude = preClose > 0 ? ((latest.high - latest.low) / preClose) * 100 : 0;
   const gapPct = preClose > 0 ? ((latest.open - preClose) / preClose) * 100 : 0;
-  const amountBillion = latest.amount / 100000000;  // 转换为亿元
-  const volumeWanShou = latest.volume / 10000;      // 转换为万手
+  // Tushare amount 单位是千元，除以100000得到亿元
+  const amountBillion = latest.amount / 100000;  // 千元 -> 亿元
+  // Tushare vol 单位是手，除以10000得到万手
+  const volumeWanShou = latest.volume / 10000;   // 手 -> 万手
   
   // 均线偏离度
   const closeVsMa5Pct = ma5 ? ((latest.close - ma5) / ma5) * 100 : null;
