@@ -5886,9 +5886,23 @@ app.get('/analysis', (c) => {
                         return;
                     }
                     
+                    console.log('[Chart] ECharts available, version:', echarts.version);
+                    console.log('[Chart] 准备初始化主图表和收入图表');
+                    
                     // 初始化图表
-                    initMainChart(data.data);
-                    initIncomeChart(data.data);
+                    try {
+                        initMainChart(data.data);
+                        console.log('[Chart] 主图表初始化完成');
+                    } catch (err) {
+                        console.error('[Chart] 主图表初始化失败:', err);
+                    }
+                    
+                    try {
+                        initIncomeChart(data.data);
+                        console.log('[Chart] 收入图表初始化完成');
+                    } catch (err) {
+                        console.error('[Chart] 收入图表初始化失败:', err);
+                    }
                 } else {
                     console.warn('[Chart] API returned error:', data.error);
                     if (mainChartDom) {
@@ -6088,11 +6102,25 @@ app.get('/analysis', (c) => {
         
         // ========== 财报数据分析显示函数 ==========
         function displayFinancialAnalysis(report) {
+            console.log('[displayFinancialAnalysis] 开始渲染财务分析', {
+                hasProfit: !!report.profitabilityResult,
+                hasBalance: !!report.balanceSheetResult,
+                hasCashFlow: !!report.cashFlowResult,
+                hasEQ: !!report.earningsQualityResult,
+                companyCode: report.companyCode
+            });
+            
             // 获取各报表分析结果，并解析rawResult
             const profitability = parseRawResult(report.profitabilityResult || {});
             const balanceSheet = parseRawResult(report.balanceSheetResult || {});
             const cashFlow = parseRawResult(report.cashFlowResult || {});
             const earningsQuality = parseRawResult(report.earningsQualityResult || {});
+            
+            console.log('[displayFinancialAnalysis] 解析结果', {
+                profitSummary: Object.keys(profitability.summary || profitability),
+                balanceSummary: Object.keys(balanceSheet.summary || balanceSheet),
+                cashFlowSummary: Object.keys(cashFlow.summary || cashFlow)
+            });
             
             // ========== 初始化趋势解读 ==========
             if (report.trendInterpretations) {
@@ -6112,9 +6140,12 @@ app.get('/analysis', (c) => {
             // ========== 加载图表数据 ==========
             const companyCode = report.companyCode;
             if (companyCode) {
+                console.log('[displayFinancialAnalysis] 开始加载图表和行业对比数据:', companyCode);
                 loadChartData(companyCode);
                 // ========== 加载行业对比数据 ==========
                 loadIndustryComparison(companyCode);
+            } else {
+                console.error('[displayFinancialAnalysis] companyCode为空，无法加载图表');
             }
             
             // 提取摘要和详细分析
