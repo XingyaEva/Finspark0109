@@ -5887,7 +5887,7 @@ app.get('/analysis', (c) => {
                     }
                     
                     console.log('[Chart] ECharts available, version:', echarts.version);
-                    console.log('[Chart] 准备初始化主图表和收入图表');
+                    console.log('[Chart] 准备初始化主图表');
                     
                     // 初始化图表
                     try {
@@ -5895,13 +5895,9 @@ app.get('/analysis', (c) => {
                         console.log('[Chart] 主图表初始化完成');
                     } catch (err) {
                         console.error('[Chart] 主图表初始化失败:', err);
-                    }
-                    
-                    try {
-                        initIncomeChart(data.data);
-                        console.log('[Chart] 收入图表初始化完成');
-                    } catch (err) {
-                        console.error('[Chart] 收入图表初始化失败:', err);
+                        if (mainChartDom) {
+                            mainChartDom.innerHTML = '<div class="flex items-center justify-center h-full text-red-400"><i class="fas fa-exclamation-triangle mr-2"></i>图表初始化失败: ' + err.message + '</div>';
+                        }
                     }
                 } else {
                     console.warn('[Chart] API returned error:', data.error);
