@@ -1247,42 +1247,134 @@ ${analysisContext}
 
   /**
    * 解析JSON结果（使用增强的解析策略）
+   * 
+   * 修复策略：
+   * 1. 移除所有markdown标记
+   * 2. 智能提取嵌套JSON对象（支持深度嵌套）
+   * 3. 处理截断的JSON（自动闭合）
+   * 4. 返回完整的rawResult而非截断版本
    */
   private parseJsonResult(result: string, agentName: string): Record<string, unknown> {
     try {
       // 策略1: 直接解析
       return JSON.parse(result);
     } catch {
-      // 策略2: 提取markdown代码块
-      const jsonMatch = result.match(/```json\n?([\s\S]*?)\n?```/);
-      if (jsonMatch) {
-        try {
-          return JSON.parse(jsonMatch[1]);
-        } catch {
-          console.error(`[${agentName}] Failed to parse markdown JSON block`);
+      // 预处理：移除可能的markdown标记
+      let cleanResult = result
+        .replace(/```json\n?/g, '')
+        .replace(/```\n?/g, '')
+        .trim();
+
+      // 策略2: 提取最外层大括号内的内容（支持深度嵌套）
+      const firstBrace = cleanResult.indexOf('{');
+      if (firstBrace !== -1) {
+        let braceCount = 0;
+        let inString = false;
+        let escapeNext = false;
+        let endIndex = -1;
+
+        for (let i = firstBrace; i < cleanResult.length; i++) {
+          const char = cleanResult[i];
+          
+          if (escapeNext) {
+            escapeNext = false;
+            continue;
+          }
+          
+          if (char === '\\') {
+            escapeNext = true;
+            continue;
+          }
+          
+          if (char === '"' && !escapeNext) {
+            inString = !inString;
+            continue;
+          }
+          
+          if (!inString) {
+            if (char === '{') {
+              braceCount++;
+            } else if (char === '}') {
+              braceCount--;
+              if (braceCount === 0) {
+                endIndex = i + 1;
+                break;
+              }
+            }
+          }
+        }
+
+        if (endIndex > firstBrace) {
+          const jsonStr = cleanResult.substring(firstBrace, endIndex);
+          try {
+            return JSON.parse(jsonStr);
+          } catch (parseError) {
+            console.warn(`[${agentName}] Failed to parse extracted JSON:`, parseError);
+            
+            // 策略3: 尝试修复截断的JSON（自动闭合未完成的结构）
+            const fixedJson = this.fixTruncatedJson(jsonStr);
+            try {
+              return JSON.parse(fixedJson);
+            } catch {
+              console.error(`[${agentName}] Failed to parse fixed JSON`);
+            }
+          }
         }
       }
       
-      // 策略3: 查找JSON对象（选择最长的）
-      const objMatches = [...result.matchAll(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g)];
-      if (objMatches.length > 0) {
-        const sortedMatches = objMatches
-          .map(m => m[0])
-          .sort((a, b) => b.length - a.length);
-        
-        for (const match of sortedMatches) {
-          try {
-            return JSON.parse(match);
-          } catch {
-            // 继续尝试下一个
-          }
-        }
-        console.error(`[${agentName}] Failed to parse any JSON object from ${objMatches.length} candidates`);
-      }
-
-      console.error(`[${agentName}] All parsing strategies failed, returning rawResult`);
-      return { rawResult: result };
+      // 策略4: 返回完整的rawResult供前端进一步解析
+      // 注意：这里返回清理后的完整文本，不做任何截断
+      console.error(`[${agentName}] All parsing strategies failed, returning full rawResult for client-side parsing`);
+      return { rawResult: cleanResult };
     }
+  }
+
+  /**
+   * 修复截断的JSON字符串
+   * 自动闭合未完成的字符串、数组和对象
+   */
+  private fixTruncatedJson(jsonStr: string): string {
+    let fixed = jsonStr.trim();
+    
+    // 检查字符串是否在引号中截断
+    const quoteCount = (fixed.match(/[^\\]"/g) || []).length;
+    if (quoteCount % 2 !== 0) {
+      // 奇数个引号，添加闭合引号
+      fixed += '"';
+    }
+    
+    // 统计未闭合的括号和大括号
+    let openBraces = 0;
+    let openBrackets = 0;
+    let inString = false;
+    let escapeNext = false;
+    
+    for (const char of fixed) {
+      if (escapeNext) {
+        escapeNext = false;
+        continue;
+      }
+      if (char === '\\') {
+        escapeNext = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (!inString) {
+        if (char === '{') openBraces++;
+        else if (char === '}') openBraces--;
+        else if (char === '[') openBrackets++;
+        else if (char === ']') openBrackets--;
+      }
+    }
+    
+    // 闭合未完成的结构
+    fixed += ']'.repeat(Math.max(0, openBrackets));
+    fixed += '}'.repeat(Math.max(0, openBraces));
+    
+    return fixed;
   }
 
   /**
