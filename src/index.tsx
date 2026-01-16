@@ -22,12 +22,18 @@ import { floatingAssistantStyles, floatingAssistantHtml, floatingAssistantScript
 import { analysisConfigStyles, analysisConfigHtml, analysisConfigScript } from './components/analysisConfig';
 import { stockMarketPanelStyles, stockMarketPanelHtml, stockMarketPanelScript } from './components/stockMarketPanel';
 import { responsiveStyles } from './styles/responsive';
+import { testChartPageHtml } from './pages/testChart';
 import type { Bindings } from './types';
 
 const app = new Hono<{ Bindings: Bindings }>();
 
 // 全局CORS
 app.use('/*', cors());
+
+// 测试页面 - ECharts & API 诊断
+app.get('/test-chart.html', (c) => {
+  return c.html(testChartPageHtml);
+});
 
 // API路由
 app.route('/api', api);
