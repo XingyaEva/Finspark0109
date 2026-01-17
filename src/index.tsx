@@ -20,13 +20,20 @@ import { settingsPageHtml } from './pages/settings';
 import { agentSettingsPageHtml } from './pages/agentSettings';
 import { floatingAssistantStyles, floatingAssistantHtml, floatingAssistantScript } from './components/floatingAssistant';
 import { analysisConfigStyles, analysisConfigHtml, analysisConfigScript } from './components/analysisConfig';
+import { stockMarketPanelStyles, stockMarketPanelHtml, stockMarketPanelScript } from './components/stockMarketPanel';
 import { responsiveStyles } from './styles/responsive';
+import { testChartPageHtml } from './pages/testChart';
 import type { Bindings } from './types';
 
 const app = new Hono<{ Bindings: Bindings }>();
 
 // 全局CORS
 app.use('/*', cors());
+
+// 测试页面 - ECharts & API 诊断
+app.get('/test-chart.html', (c) => {
+  return c.html(testChartPageHtml);
+});
 
 // API路由
 app.route('/api', api);
@@ -216,6 +223,7 @@ app.get('/', (c) => {
         .pro-feature.locked:hover { opacity: 0.8; }
         ${floatingAssistantStyles}
         ${analysisConfigStyles}
+        ` + stockMarketPanelStyles + `
         ${responsiveStyles}
     </style>
 </head>
@@ -1566,6 +1574,9 @@ app.get('/analysis', (c) => {
                         <i class="fas fa-images sm:mr-2"></i><span class="hidden sm:inline">查看漫画</span>
                     </button>
                 </div>
+
+                <!-- 🆕 股票走势面板（用户建议放在投资建议摘要前） -->
+                ` + stockMarketPanelHtml + `
 
                 <!-- 投资建议摘要（整合关键要点） -->
                 <div id="summaryCard" class="card rounded-xl p-4 md:p-6 mb-4 md:mb-6">
@@ -3259,6 +3270,13 @@ app.get('/analysis', (c) => {
         // 显示分析结果 - 支持深度分析的分层展示
         function displayResults(report) {
             document.getElementById('analysisResults').classList.remove('hidden');
+            
+            // 🆕 加载股票走势面板数据
+            // 优先使用报告中的股票代码，其次使用URL参数中的code
+            const stockCode = report.companyCode || code;
+            if (stockCode && window.StockMarketPanel) {
+                window.StockMarketPanel.loadData(stockCode, 90); // 默认3个月
+            }
             
             const conclusion = report.finalConclusion || {};
             // 兼容新旧数据格式 - 增强版，遍历所有可能的数据路径
@@ -5035,8 +5053,33 @@ app.get('/analysis', (c) => {
             updateIndustryComparisonAgentStatus('loading', 90);
             
             try {
-                const response = await fetch(\`/api/analyze/industry-comparison/\${companyCode}\`);
+                const response = await fetch(\`/api/analyze/industry-comparison/\${companyCode}\`, {
+                    headers: getAuthHeaders()
+                });
                 const data = await response.json();
+                
+                // 处理权限不足 (403)
+                if (!data.success && data.needUpgrade) {
+                    // 显示升级提示（内嵌样式）
+                    aiAnalysisDiv.innerHTML = \`
+                        <div class="border-2 border-dashed border-orange-600/30 rounded-lg p-6 text-center bg-gradient-to-br from-orange-900/10 to-orange-800/5">
+                            <i class="fas fa-lock text-3xl text-orange-500 mb-3"></i>
+                            <h4 class="text-lg font-semibold text-orange-400 mb-2">AI深度行业分析</h4>
+                            <p class="text-gray-400 text-sm mb-4">\${data.upgradePrompt || '升级Pro会员解锁AI深度分析'}</p>
+                            <div class="flex gap-3 justify-center">
+                                <a href="/membership" class="btn-gold px-4 py-2 rounded-lg text-sm font-semibold inline-flex items-center gap-2">
+                                    <i class="fas fa-crown"></i>立即升级
+                                </a>
+                                <button onclick="showModal('loginModal')" class="btn-outline px-4 py-2 rounded-lg text-sm">
+                                    <i class="fas fa-sign-in-alt"></i>登录
+                                </button>
+                            </div>
+                        </div>
+                    \`;
+                    // 基础对比数据已加载，标记为完成（部分功能需升级）
+                    updateIndustryComparisonAgentStatus('completed');
+                    return;
+                }
                 
                 if (data.success && data.aiAnalysis) {
                     renderIndustryAIAnalysis(data.aiAnalysis);
@@ -5049,7 +5092,7 @@ app.get('/analysis', (c) => {
                 }
             } catch (error) {
                 console.error('[IndustryAIAnalysis] Error:', error);
-                aiAnalysisDiv.innerHTML = '<div class="text-center py-4 text-red-400">AI分析加载失败</div>';
+                aiAnalysisDiv.innerHTML = '<div class="text-center py-4 text-red-400">AI分析加载失败，请稍后重试</div>';
                 // 基础数据已加载，仅AI分析失败，仍标记为完成（部分完成）
                 updateIndustryComparisonAgentStatus('completed');
             }
@@ -5849,9 +5892,19 @@ app.get('/analysis', (c) => {
                         return;
                     }
                     
+                    console.log('[Chart] ECharts available, version:', echarts.version);
+                    console.log('[Chart] 准备初始化主图表');
+                    
                     // 初始化图表
-                    initMainChart(data.data);
-                    initIncomeChart(data.data);
+                    try {
+                        initMainChart(data.data);
+                        console.log('[Chart] 主图表初始化完成');
+                    } catch (err) {
+                        console.error('[Chart] 主图表初始化失败:', err);
+                        if (mainChartDom) {
+                            mainChartDom.innerHTML = '<div class="flex items-center justify-center h-full text-red-400"><i class="fas fa-exclamation-triangle mr-2"></i>图表初始化失败: ' + err.message + '</div>';
+                        }
+                    }
                 } else {
                     console.warn('[Chart] API returned error:', data.error);
                     if (mainChartDom) {
@@ -6051,11 +6104,25 @@ app.get('/analysis', (c) => {
         
         // ========== 财报数据分析显示函数 ==========
         function displayFinancialAnalysis(report) {
+            console.log('[displayFinancialAnalysis] 开始渲染财务分析', {
+                hasProfit: !!report.profitabilityResult,
+                hasBalance: !!report.balanceSheetResult,
+                hasCashFlow: !!report.cashFlowResult,
+                hasEQ: !!report.earningsQualityResult,
+                companyCode: report.companyCode
+            });
+            
             // 获取各报表分析结果，并解析rawResult
             const profitability = parseRawResult(report.profitabilityResult || {});
             const balanceSheet = parseRawResult(report.balanceSheetResult || {});
             const cashFlow = parseRawResult(report.cashFlowResult || {});
             const earningsQuality = parseRawResult(report.earningsQualityResult || {});
+            
+            console.log('[displayFinancialAnalysis] 解析结果', {
+                profitSummary: Object.keys(profitability.summary || profitability),
+                balanceSummary: Object.keys(balanceSheet.summary || balanceSheet),
+                cashFlowSummary: Object.keys(cashFlow.summary || cashFlow)
+            });
             
             // ========== 初始化趋势解读 ==========
             if (report.trendInterpretations) {
@@ -6075,9 +6142,12 @@ app.get('/analysis', (c) => {
             // ========== 加载图表数据 ==========
             const companyCode = report.companyCode;
             if (companyCode) {
+                console.log('[displayFinancialAnalysis] 开始加载图表和行业对比数据:', companyCode);
                 loadChartData(companyCode);
                 // ========== 加载行业对比数据 ==========
                 loadIndustryComparison(companyCode);
+            } else {
+                console.error('[displayFinancialAnalysis] companyCode为空，无法加载图表');
             }
             
             // 提取摘要和详细分析
@@ -8641,7 +8711,16 @@ app.get('/analysis', (c) => {
             document.getElementById('comicSection').scrollIntoView({ behavior: 'smooth' });
         });
         
-        // 启动分析
+        // 🆕 股票走势面板脚本（提前初始化，确保面板准备就绪）
+        ` + stockMarketPanelScript + `
+        
+        // 🆕 立即加载股票走势面板数据（不等待分析完成）
+        if (code && window.StockMarketPanel) {
+            console.log('[Main] 页面加载完成，立即加载股票面板数据:', code);
+            window.StockMarketPanel.loadData(code, 90); // 默认加载3个月数据
+        }
+        
+        // 启动分析（面板初始化后才执行，确保可以安全调用loadData）
         startAnalysis();
     </script>
     

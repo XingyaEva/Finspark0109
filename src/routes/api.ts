@@ -249,6 +249,77 @@ api.get('/stock/daily/:code', async (c) => {
   }
 });
 
+// ============ 股票走势面板 - 完整市场数据包 ============
+// 用于前端股票走势面板一次性加载所有需要的数据
+// 支持参数:
+// - days: K线天数，默认180天（6个月）
+// - withInsight: 是否包含解读数据，默认true
+api.get('/stock/:code/market-data', async (c) => {
+  const code = c.req.param('code');
+  const daysParam = c.req.query('days');
+  const withInsightParam = c.req.query('withInsight');
+  const days = daysParam ? parseInt(daysParam) : 180; // 默认6个月
+  const withInsight = withInsightParam !== 'false'; // 默认包含解读
+
+  if (!code) {
+    return c.json({ success: false, error: '请提供股票代码' }, 400);
+  }
+
+  try {
+    const tushare = createTushareService({
+      token: c.env.TUSHARE_TOKEN,
+      cache: c.env.CACHE,
+    });
+
+    // 使用 getMarketDataPackage 一次性获取所有数据
+    const marketData = await tushare.getMarketDataPackage(code, days);
+
+    // 如果没有基本信息，说明股票不存在
+    if (!marketData.basic) {
+      return c.json({ success: false, error: '股票不存在或数据获取失败' }, 404);
+    }
+
+    // 如果需要解读数据
+    if (withInsight) {
+      try {
+        const { generateMarketInsightPackage } = await import('../services/insightGenerator');
+        const insightPackage = generateMarketInsightPackage(
+          marketData,
+          code,
+          marketData.basic.name
+        );
+        
+        return c.json({
+          success: true,
+          data: marketData,
+          insight: insightPackage,
+        });
+      } catch (insightError) {
+        console.warn('Generate insight error:', insightError);
+        // 解读生成失败不影响主数据返回
+        return c.json({
+          success: true,
+          data: marketData,
+          insight: null,
+          insightError: '解读数据生成失败',
+        });
+      }
+    }
+
+    return c.json({
+      success: true,
+      data: marketData,
+    });
+  } catch (error) {
+    console.error('Market data error:', error);
+    return c.json({ 
+      success: false, 
+      error: '获取市场数据失败',
+      details: error instanceof Error ? error.message : '未知错误'
+    }, 500);
+  }
+});
+
 // ============ 财务数据 ============
 api.get('/stock/financial/:code/:type', async (c) => {
   const code = c.req.param('code');
@@ -1533,8 +1604,8 @@ ${JSON.stringify(metrics, null, 2)}
 请基于以上数据进行深度行业对比分析。
     `;
     
-    // 调用AI进行深度分析
-    const aiAnalysis = await vectorEngine.analyzeFinancialReport(
+    // 调用AI进行深度分析（使用JSON专用方法确保格式正确）
+    const aiAnalysis = await vectorEngine.analyzeFinancialReportJson(
       AGENT_PROMPTS.INDUSTRY_COMPARISON
         .replace('{targetCompany}', `${peersResult.targetStock.name}（${peersResult.targetStock.code}）`)
         .replace('{industry}', peersResult.industry)
@@ -1543,18 +1614,16 @@ ${JSON.stringify(metrics, null, 2)}
       prompt
     );
     
-    // 解析AI分析结果
-    let analysisResult: Record<string, unknown> = {};
-    try {
-      // 尝试提取JSON
-      const jsonMatch = aiAnalysis.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        analysisResult = JSON.parse(jsonMatch[0]);
-      }
-    } catch (e) {
-      console.warn('[IndustryComparison] JSON解析失败，使用原始响应');
-      analysisResult = { rawAnalysis: aiAnalysis };
-    }
+    // 使用统一的JSON解析工具
+    const { parseAIJsonResponse } = await import('../utils/jsonParser');
+    const parseResult = parseAIJsonResponse(aiAnalysis, {
+      agentName: 'IndustryComparison',
+      enableLogging: true
+    });
+    
+    const analysisResult = parseResult.success 
+      ? parseResult.data 
+      : { rawAnalysis: aiAnalysis };
     
     const result = {
       targetStock: peersResult.targetStock,
@@ -1726,44 +1795,24 @@ ${JSON.stringify(mergedData, null, 2)}
       prompt
     );
     
-    // 解析结果
-    console.log('[TrendInterpretation API] AI 原始返回长度:', result?.length || 0);
-    console.log('[TrendInterpretation API] AI 原始返回内容预览:', result?.substring(0, 300));
+    // 使用统一的JSON解析工具
+    const { parseAIJsonResponse } = await import('../utils/jsonParser');
+    const parseResult = parseAIJsonResponse(result, {
+      agentName: 'TrendInterpretation',
+      enableLogging: true
+    });
     
-    let interpretations;
-    try {
-      interpretations = JSON.parse(result);
-    } catch {
-      // 尝试提取 markdown 代码块中的 JSON
-      const jsonMatch = result.match(/```json\n?([\s\S]*?)\n?```/);
-      if (jsonMatch) {
-        interpretations = JSON.parse(jsonMatch[1]);
-      } else {
-        // 尝试提取纯 JSON 对象
-        const objMatch = result.match(/\{[\s\S]*\}/);
-        if (objMatch) {
-          interpretations = JSON.parse(objMatch[0]);
-        } else {
-          console.error('[TrendInterpretation API] 无法解析AI返回:', result?.substring(0, 500));
-        }
-      }
-    }
-    
-    // 如果解析失败，返回空对象
-    if (!interpretations) {
-      console.error('[TrendInterpretation API] 解析失败，返回空数据');
-      interpretations = {};
-    }
+    let interpretations = parseResult.success ? parseResult.data : {};
     
     // 标准化数据结构：处理 AI 可能返回的不同格式
     // 格式1: { trend_analysis: { netProfit: {...}, ... } } => 提取 trend_analysis
     // 格式2: { netProfit: {...}, ... } => 直接使用
-    if (interpretations.trend_analysis && typeof interpretations.trend_analysis === 'object') {
+    if (interpretations && interpretations.trend_analysis && typeof interpretations.trend_analysis === 'object') {
       console.log('[TrendInterpretation API] 检测到 trend_analysis 嵌套结构，提取内部数据');
       interpretations = interpretations.trend_analysis;
     }
     
-    console.log('[TrendInterpretation API] 解析完成，指标数量:', Object.keys(interpretations).length);
+    console.log('[TrendInterpretation API] 解析完成，指标数量:', Object.keys(interpretations || {}).length);
     
     // 写入缓存
     if (cache && interpretations) {
